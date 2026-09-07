@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { getStaffAgenda, businessToday, singleDay } from "@/lib/agenda/queries";
 import { AgendaList } from "@/components/agenda/AgendaList";
@@ -16,9 +17,17 @@ export default async function TodayPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">Today</h1>
-        <p className="text-sm text-slate-500">{formatDateHeading(today)}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Today</h1>
+          <p className="text-sm text-slate-500">{formatDateHeading(today)}</p>
+        </div>
+        <Link
+          href="/my/appointments/new?return=today"
+          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+        >
+          + New
+        </Link>
       </div>
 
       {result.ok ? (

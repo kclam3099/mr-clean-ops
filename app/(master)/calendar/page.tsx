@@ -33,6 +33,12 @@ export default async function CalendarPage({
           </p>
         </div>
         <div className="flex gap-2">
+          <Link
+            href={`/appointments/new?return=calendar${scope.kind === "workspace" ? `&ws=${scope.workspaceId}` : ""}`}
+            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800"
+          >
+            + New appointment
+          </Link>
           <WeekLink ws={params.ws} week={addDays(range.from, -7)} label="← Previous" />
           <WeekLink ws={params.ws} week={businessToday()} label="This week" />
           <WeekLink ws={params.ws} week={addDays(range.from, 7)} label="Next →" />

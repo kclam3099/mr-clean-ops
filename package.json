@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:unit": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/unit/**/*.test.mjs\"",
     "test:e2e:privacy": "node tests/e2e/cross-user-privacy.test.mjs",
+    "test:e2e:f2": "node tests/e2e/add-appointment.test.mjs",
     "test:availability": "node supabase/tests/availability-finder-regression.mjs",
     "test:past-guard": "node supabase/tests/past-guard-and-config-regression.mjs",
     "test:regression": "node supabase/tests/run-all.mjs",
@@ -23,7 +24,8 @@
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

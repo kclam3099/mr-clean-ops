@@ -9,27 +9,27 @@ import { AppointmentForm } from "@/components/appointment-form/AppointmentForm";
 export const metadata = { title: "New appointment — Mr Clean & Clean Ops" };
 
 /**
- * Master Add Appointment.
+ * Staff Add Appointment. Mobile-first, single column.
  *
- * Every search param is a HINT. `resolveBookingContext` enumerates what this
- * caller can see first and matches the hints against that, so `?staff=<uuid>`
- * for someone invisible resolves to nothing — no fetch, no render, no error
- * that would confirm the id exists.
+ * No staff selector exists, and no staff id is submitted — `create_appointment`
+ * derives the caller's staff row from the JWT. A workspace selector renders
+ * only when this person genuinely belongs to more than one; with a single
+ * membership it is derived silently.
  *
- * "All Operations" is not a workspace. Arriving from it simply means no
- * workspace hint, so the form requires a real one before anything can be saved.
+ * The staff dashboard itself stays merged and identity-scoped; workspace is a
+ * question only here, where the booking needs attribution.
  */
-export default async function NewAppointmentPage({
+export default async function NewStaffAppointmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ws?: string; staff?: string; date?: string; time?: string; return?: string }>;
+  searchParams: Promise<{ date?: string; time?: string; return?: string }>;
 }) {
   const session = await getSessionContext();
   if (!session) redirect("/login");
 
   const params = await searchParams;
   const [context, config] = await Promise.all([
-    resolveBookingContext(session, { ws: params.ws, staff: params.staff }),
+    resolveBookingContext(session),
     getBookingConfig(),
   ]);
 
@@ -39,18 +39,11 @@ export default async function NewAppointmentPage({
   const time = params.time && /^([01]\d|2[0-3]):[0-5]\d$/.test(params.time) ? params.time : undefined;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 pb-24">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">New appointment</h1>
-          <p className="text-sm text-slate-500">
-            {context.workspaces.length === 0
-              ? "No workspace available for booking."
-              : "Choose the workspace and team member, then the job details."}
-          </p>
-        </div>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900">New appointment</h1>
         <Link
-          href="/calendar"
+          href="/my/today"
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
         >
           Cancel
@@ -59,13 +52,14 @@ export default async function NewAppointmentPage({
 
       {context.workspaces.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
-          There is no workspace with active team members available to you.
+          You are not an active member of any workspace, so you cannot create appointments.
+          Please contact your manager.
         </p>
       ) : (
         <AppointmentForm
           context={context}
           config={config}
-          returnTo={params.return}
+          returnTo={params.return ?? "today"}
           initialDate={date}
           initialTime={time}
           businessToday={today}
