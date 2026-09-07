@@ -134,3 +134,28 @@ hidden, the capture times out). Verification was done through DOM assertions
 instead, which is stronger evidence for these properties anyway.
 
 ---
+
+## Phase O4 — WhatsApp and Maps quick actions — DONE
+
+Deep links only: no WhatsApp API, no Maps API key, no automated sending, no
+background work. Every link is opened by the user clicking it, and WhatsApp
+opens with the message prefilled for them to review and send themselves.
+
+`lib/external-links.ts` centralises the builders, replacing the Maps logic that
+had been duplicated in two components. The inputs are customer-controlled free
+text, so the rules are strict: the scheme is a literal in the module and never
+comes from input; every interpolated value is percent-encoded; and a value that
+does not validate produces **no link at all** rather than a broken one.
+
+16 unit tests, weighted towards the negative cases — `javascript:alert(1)`,
+`012 javascript:alert(1)`, `0123456789@evil.example` and `+60-12-345-6789?text=x`
+all yield null, and a hostile message or address cannot add a second `?` or an
+extra `&` parameter. Four E2E checks confirm the rendered links, including that
+an unusable phone number renders no WhatsApp button.
+
+Reminder text is generated in code for now. `business_settings` carries
+`wa_reminder_template_en/_zh/_ms`, but they are empty and deliberately not
+exposed through `get_booking_config` — when they are populated, this becomes
+the fallback rather than the only option.
+
+---

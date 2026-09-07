@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { AgendaAppointment } from "@/lib/agenda/queries";
+import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
 
 /**
  * The shared appointment card, used by both the Master calendar and the Staff
@@ -34,7 +35,11 @@ export function AppointmentCard({
   /** When given, the card body links through to the appointment detail. */
   detailHref?: string;
 }) {
-  const mapsHref = buildMapsHref(a);
+  const maps = mapsHref(a.addressLine, a.areaCity);
+  const whatsapp = whatsappHref(
+    a.customerPhone,
+    buildReminderMessage({ customerName: a.customerName, date: a.date, startTime: a.startTime }),
+  );
 
   return (
     <article
@@ -106,9 +111,9 @@ export function AppointmentCard({
 
       {!compact ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {mapsHref ? (
+          {maps ? (
             <a
-              href={mapsHref}
+              href={maps}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700
@@ -124,6 +129,19 @@ export function AppointmentCard({
                          transition hover:bg-slate-50"
             >
               Call
+            </a>
+          ) : null}
+          {/* Deep link only — opens WhatsApp with the message prefilled. It is
+              never sent automatically; the user reviews and presses send. */}
+          {whatsapp ? (
+            <a
+              href={whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700
+                         transition hover:bg-slate-50"
+            >
+              WhatsApp
             </a>
           ) : null}
         </div>
@@ -181,10 +199,4 @@ function StatusBadge({
       {status}
     </span>
   );
-}
-
-function buildMapsHref(a: AgendaAppointment): string | null {
-  const query = [a.addressLine, a.areaCity].filter(Boolean).join(", ");
-  if (!query) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }

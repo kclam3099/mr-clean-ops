@@ -554,6 +554,84 @@ try {
       actual: String(restored), ok: restored === before,
     });
   }
+
+  // =========================================================================
+  // 8. External quick actions — deep links only
+  // =========================================================================
+  {
+    const { page, ctx } = await session(ids.email.kc);
+    await page.goto(`${BASE}/appointments/${jackAppt}`, { waitUntil: "load" });
+    await settled(page);
+    await page.waitForTimeout(600);
+
+    const links = await page.evaluate(() => {
+      const all = [...document.querySelectorAll("a")];
+      const byText = (re) => all.find((a) => re.test(a.textContent.trim()));
+      const maps = byText(/^directions$/i);
+      const wa = byText(/whatsapp/i);
+      return {
+        mapsHref: maps?.getAttribute("href") ?? null,
+        mapsTarget: maps?.getAttribute("target") ?? null,
+        mapsRel: maps?.getAttribute("rel") ?? null,
+        waHref: wa?.getAttribute("href") ?? null,
+        waTarget: wa?.getAttribute("target") ?? null,
+        waRel: wa?.getAttribute("rel") ?? null,
+      };
+    });
+
+    rec.check({
+      id: "LINK-01 Maps is an encoded external search URL", actor: "KC",
+      setup: "appointment has an address and area",
+      action: "read the Directions link",
+      expected: "https://www.google.com/maps/search/?api=1&query=<encoded>, opened in a new tab",
+      actual: `${links.mapsHref} target=${links.mapsTarget} rel=${links.mapsRel}`,
+      ok: !!links.mapsHref
+          && links.mapsHref.startsWith("https://www.google.com/maps/search/?api=1&query=")
+          && !links.mapsHref.includes(" ")
+          && links.mapsTarget === "_blank"
+          && (links.mapsRel ?? "").includes("noopener"),
+    });
+
+    rec.check({
+      id: "LINK-02 WhatsApp is a wa.me deep link with prefilled text", actor: "KC",
+      setup: "appointment has a phone number",
+      action: "read the WhatsApp link",
+      expected: "https://wa.me/<digits>?text=<encoded>, no API call, opened in a new tab",
+      actual: `${(links.waHref ?? "").slice(0, 90)} target=${links.waTarget} rel=${links.waRel}`,
+      ok: !!links.waHref
+          && /^https:\/\/wa\.me\/\d{8,15}\?text=/.test(links.waHref)
+          && !links.waHref.includes(" ")
+          && links.waTarget === "_blank"
+          && (links.waRel ?? "").includes("noopener"),
+    });
+
+    rec.check({
+      id: "LINK-03 the reminder text is prefilled, not sent", actor: "KC", setup: "-",
+      action: "decode the WhatsApp message",
+      expected: "names the customer and the appointment time; nothing is sent automatically",
+      actual: decodeURIComponent((links.waHref ?? "").split("?text=")[1] ?? "").slice(0, 100),
+      ok: /Mr Clean/.test(decodeURIComponent((links.waHref ?? "").split("?text=")[1] ?? "")),
+    });
+
+    // A customer whose phone is unusable must produce NO link rather than a
+    // broken one.
+    const noPhone = await make(ids.ws.shared, ids.staff.dyron, await day(230), "10:00", "TEST CUSTOMER F3 NOPHONE");
+    await fx.query(`update public.appointments set customer_phone = 'not a phone' where id = $1`, [noPhone]);
+    await page.goto(`${BASE}/appointments/${noPhone}`, { waitUntil: "load" });
+    await settled(page);
+    await page.waitForTimeout(600);
+    const noWa = await page.evaluate(() =>
+      [...document.querySelectorAll("a")].filter((a) => /whatsapp/i.test(a.textContent)).length);
+    rec.check({
+      id: "LINK-04 an unusable phone renders no WhatsApp link", actor: "KC",
+      setup: "customer_phone is not a phone number",
+      action: "look for a WhatsApp link",
+      expected: "absent — better no button than a broken or unsafe one",
+      actual: `${noWa} link(s)`, ok: noWa === 0,
+    });
+    await ctx.close();
+  }
+
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();

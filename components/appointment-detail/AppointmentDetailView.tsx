@@ -13,6 +13,7 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { OverrideDialog } from "@/components/appointment-form/OverrideDialog";
 import { ItemsEditor, initialItemRow, type ItemRow } from "@/components/appointment-form/ItemsEditor";
 import { estimatedDurationMinutes, formatDuration, formatMoney, subtotal } from "@/lib/pricing/duration";
+import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
 
 type Panel = "none" | "customer" | "items" | "reschedule";
 /** Which action a pending override retry belongs to. */
@@ -188,7 +189,13 @@ function Header({ detail, showWorkspace, backHref }: {
 }
 
 function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWorkspace: boolean }) {
-  const mapsHref = buildMapsHref(detail);
+  const maps = mapsHref(detail.addressLine, detail.areaCity);
+  const whatsapp = whatsappHref(
+    detail.customerPhone,
+    buildReminderMessage({
+      customerName: detail.customerName, date: detail.date, startTime: detail.startTime,
+    }),
+  );
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4">
       <dl className="grid gap-3 sm:grid-cols-2">
@@ -201,8 +208,8 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
         {detail.remarks ? <Row label="Notes" value={detail.remarks} wide /> : null}
       </dl>
       <div className="mt-4 flex flex-wrap gap-2">
-        {mapsHref ? (
-          <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+        {maps ? (
+          <a href={maps} target="_blank" rel="noopener noreferrer"
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
             Directions
           </a>
@@ -211,6 +218,14 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
           <a href={`tel:${detail.customerPhone}`}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
             Call
+          </a>
+        ) : null}
+        {/* Opens WhatsApp with the reminder prefilled. Nothing is sent without
+            the user pressing send in WhatsApp itself. */}
+        {whatsapp ? (
+          <a href={whatsapp} target="_blank" rel="noopener noreferrer"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+            WhatsApp reminder
           </a>
         ) : null}
       </div>
@@ -506,9 +521,4 @@ function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(new Date(Date.UTC(y as number, (m as number) - 1, d as number)));
-}
-
-function buildMapsHref(d: AppointmentDetail): string | null {
-  const query = [d.addressLine, d.areaCity].filter(Boolean).join(", ");
-  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : null;
 }
