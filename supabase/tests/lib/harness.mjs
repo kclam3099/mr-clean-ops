@@ -1,0 +1,343 @@
+// Shared harness for the DEV regression suites.
+//
+// These are INTEGRATION tests: they run against a live Supabase DEV project
+// using real GoTrue JWTs, so they exercise PostgREST + RLS exactly as the
+// browser will. A direct postgres connection is used ONLY to set up and tear
+// down fixtures (there is no hard-delete RPC by design) and to read back
+// server-computed columns for assertions.
+//
+// Every suite creates its own fixture and removes it in a finally block. No
+// suite may depend on data left behind by another suite or by an earlier run.
+
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import pg from 'pg';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO = resolve(HERE, '../../..');
+
+// ---------------------------------------------------------------------------
+// config — never hard-code credentials; .env.local is gitignored
+// ---------------------------------------------------------------------------
+function loadEnvLocal() {
+  const p = resolve(REPO, '.env.local');
+  if (!existsSync(p)) return;
+  for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m && process.env[m[1]] === undefined) {
+      process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+  }
+}
+loadEnvLocal();
+
+function required(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`\nMissing ${name}.\nSet it in .env.local (gitignored) — see supabase/tests/README.md.`);
+    process.exit(2);
+  }
+  return v;
+}
+
+export const CONFIG = {
+  url: () => required('NEXT_PUBLIC_SUPABASE_URL').replace(/\/+$/, ''),
+  anon: () => required('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+  testPassword: () => required('TEST_IDENTITY_PASSWORD'),
+  dbPassword: () => required('SUPABASE_DB_PASSWORD'),
+  dbHost: () => process.env.SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
+  dbUser: () => required('SUPABASE_DB_USER'),
+};
+
+// A guard against ever pointing these destructive fixtures at production.
+export function assertDevProject() {
+  const u = CONFIG.url();
+  if (process.env.ALLOW_NON_DEV_TESTS === 'true') return;
+  if (!/ozojfflkchltwqnbflso/.test(u)) {
+    console.error(`\nRefusing to run: ${u} is not the known DEV project.\n` +
+      `These suites create and DELETE rows. Set ALLOW_NON_DEV_TESTS=true only if you are certain.`);
+    process.exit(2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers — real JWTs through PostgREST
+// ---------------------------------------------------------------------------
+export async function signIn(email) {
+  const r = await fetch(`${CONFIG.url()}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: CONFIG.anon(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: CONFIG.testPassword() }),
+  });
+  const b = await r.json();
+  if (!r.ok || !b.access_token) throw new Error(`sign-in failed for ${email}: ${JSON.stringify(b)}`);
+  return b.access_token;
+}
+
+export async function rpc(fn, token, args) {
+  const r = await fetch(`${CONFIG.url()}/rest/v1/rpc/${fn}`, {
+    method: 'POST',
+    headers: {
+      apikey: CONFIG.anon(), 'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(args || {}),
+  });
+  const text = await r.text();
+  let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { ok: r.ok, status: r.status, body, msg: body?.message ?? String(text).slice(0, 300) };
+}
+
+export async function rest(path, token, init = {}) {
+  const r = await fetch(`${CONFIG.url()}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: CONFIG.anon(), 'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init.headers || {}),
+    },
+  });
+  const text = await r.text();
+  let body; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { ok: r.ok, status: r.status, body, rows: Array.isArray(body) ? body : [], msg: body?.message ?? String(text).slice(0, 300) };
+}
+
+// ---------------------------------------------------------------------------
+// admin connection — fixtures and assertions only, never the system under test
+// ---------------------------------------------------------------------------
+export async function adminClient() {
+  const c = new pg.Client({
+    host: CONFIG.dbHost(), port: 5432, user: CONFIG.dbUser(),
+    password: CONFIG.dbPassword(), database: 'postgres',
+    ssl: { rejectUnauthorized: false },
+  });
+  await c.connect();
+  return c;
+}
+
+// ---------------------------------------------------------------------------
+// result recording
+// ---------------------------------------------------------------------------
+export function createRecorder(suiteName) {
+  const results = [];
+  let pass = 0, fail = 0, securityFail = 0;
+
+  function check({ id, actor = '-', setup = '-', action, expected, actual, ok, security = false }) {
+    if (ok) {
+      pass++;
+    } else {
+      fail++;
+      if (security) securityFail++;
+    }
+    results.push({ suite: suiteName, id, actor, setup, action, expected, actual, ok, security });
+    const tag = ok ? 'PASS' : (security ? 'SECURITY-FAIL' : 'FAIL');
+    console.log(`[${tag}] ${id} (${actor}) :: ${action}`);
+    console.log(`        expected: ${expected}`);
+    console.log(`        actual  : ${actual}`);
+    return ok;
+  }
+
+  function summary() {
+    console.log(`\n########## ${suiteName}: ${pass} PASS / ${fail} FAIL (security failures: ${securityFail}) ##########`);
+    const bad = results.filter(r => !r.ok);
+    if (bad.length) {
+      console.log('\nFAILED:');
+      for (const f of bad) {
+        console.log(`  ${f.security ? '[SECURITY] ' : ''}${f.id} (${f.actor}) — ${f.action}`);
+        console.log(`      expected: ${f.expected}`);
+        console.log(`      actual  : ${f.actual}`);
+      }
+    }
+    return { suite: suiteName, pass, fail, securityFail, results };
+  }
+
+  return { check, summary, get counts() { return { pass, fail, securityFail }; } };
+}
+
+// ---------------------------------------------------------------------------
+// identities — resolved by name at runtime, never hard-coded UUIDs, so the
+// suites survive a DEV data reset that reissues ids
+// ---------------------------------------------------------------------------
+export async function resolveIdentities(db) {
+  const { rows: profiles } = await db.query(
+    `select p.id, p.full_name, p.role::text as role from public.profiles p`);
+  const { rows: staff } = await db.query(
+    `select s.id, s.display_name, s.profile_id from public.staff s`);
+  const { rows: workspaces } = await db.query(`select id, name from public.workspaces`);
+
+  const byName = (list, key, name) => {
+    const hit = list.find(x => x[key] === name);
+    if (!hit) throw new Error(`fixture identity missing: ${name} (run the DEV identity setup first)`);
+    return hit;
+  };
+
+  const shared = byName(workspaces, 'name', 'Shared Team');
+  const priv = byName(workspaces, 'name', 'KC Private Team');
+
+  const P = n => byName(profiles, 'full_name', n);
+  const S = n => byName(staff, 'display_name', n);
+
+  return {
+    ws: { shared: shared.id, private: priv.id },
+    profile: {
+      kc: P('TEST_KC').id, nick: P('TEST_NICK').id, jack: P('TEST_JACK').id,
+      dyron: P('TEST_DYRON').id, victor: P('TEST_VICTOR').id,
+    },
+    staff: { jack: S('TEST_JACK').id, dyron: S('TEST_DYRON').id, victor: S('TEST_VICTOR').id },
+    email: {
+      kc: 'test-kc@mrcleanclean.dev.test', nick: 'test-nick@mrcleanclean.dev.test',
+      jack: 'test-jack@mrcleanclean.dev.test', dyron: 'test-dyron@mrcleanclean.dev.test',
+      victor: 'test-victor@mrcleanclean.dev.test',
+    },
+  };
+}
+
+export async function signInAll(ids) {
+  const T = {};
+  for (const [k, email] of Object.entries(ids.email)) T[k] = await signIn(email);
+  return T;
+}
+
+// ---------------------------------------------------------------------------
+// fixture tracker — everything a suite creates is registered here and removed
+// in teardown, so no suite leaves scheduling data behind
+// ---------------------------------------------------------------------------
+export function createFixture(db) {
+  const appointments = new Set();
+  const timeOff = new Set();
+  const workingHours = [];      // { staffId, dayOfWeek }
+  const memberships = [];       // { staffId, workspaceId, restoreActive }
+  const usedDates = new Set();
+  const TAG = 'REGRESSION FIXTURE';
+
+  return {
+    TAG,
+    track(id) { if (id) appointments.add(id); return id; },
+    trackTimeOff(id) { if (id) timeOff.add(id); return id; },
+    trackWorkingHours(staffId, dayOfWeek) { workingHours.push({ staffId, dayOfWeek }); },
+    trackMembership(staffId, workspaceId, restoreActive) { memberships.push({ staffId, workspaceId, restoreActive }); },
+
+    /** A far-future date on which `staffId` has no appointment at all, never
+     *  reused within a run. Keeps suites independent of existing data. */
+    async freeDate(staffId, { dayOfWeek = null, offsetDays = 500 } = {}) {
+      for (let k = offsetDays; k < offsetDays + 900; k++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() + k);
+        if (dayOfWeek !== null && d.getUTCDay() !== dayOfWeek) continue;
+        const iso = d.toISOString().slice(0, 10);
+        if (usedDates.has(iso)) continue;
+        const { rows } = await db.query(
+          `select count(*)::int n from public.appointments where staff_id = $1 and appt_date = $2`,
+          [staffId, iso]);
+        if (rows[0].n === 0) { usedDates.add(iso); return iso; }
+      }
+      throw new Error('no free date available for fixture');
+    },
+
+    /** Server-computed columns, for assertions the API does not expose. */
+    async appointment(id) {
+      const { rows } = await db.query(`select * from public.appointments where id = $1`, [id]);
+      return rows[0];
+    },
+    async query(sql, params) { return (await db.query(sql, params)).rows; },
+
+    async cleanup() {
+      const ids = [...appointments];
+      if (ids.length) {
+        // overrides first (conflicting_appointment_id has no ON DELETE CASCADE),
+        // then the audit rows that reference these appointments, then the rows.
+        await db.query(`delete from public.appointment_rule_overrides
+                        where subject_appointment_id = any($1::uuid[])
+                           or conflicting_appointment_id = any($1::uuid[])`, [ids]);
+        await db.query(`delete from public.audit_logs where entity_id = any($1::uuid[])`, [ids]);
+        await db.query(`delete from public.appointment_items where appointment_id = any($1::uuid[])`, [ids]);
+        await db.query(`delete from public.appointments where id = any($1::uuid[])`, [ids]);
+      }
+      if (timeOff.size) {
+        await db.query(`delete from public.staff_time_off where id = any($1::uuid[])`, [[...timeOff]]);
+      }
+      for (const w of workingHours) {
+        await db.query(`delete from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
+          [w.staffId, w.dayOfWeek]);
+      }
+      for (const m of memberships) {
+        if (m.restoreActive) {
+          await db.query(`update public.staff_workspaces set is_active = true
+                          where staff_id = $1 and workspace_id = $2`, [m.staffId, m.workspaceId]);
+        } else {
+          await db.query(`delete from public.staff_workspaces
+                          where staff_id = $1 and workspace_id = $2`, [m.staffId, m.workspaceId]);
+        }
+      }
+      // belt and braces: nothing tagged by this harness may survive a run
+      await db.query(`delete from public.appointment_items where appointment_id in
+                      (select id from public.appointments where remarks = $1)`, [TAG]);
+      await db.query(`delete from public.appointment_rule_overrides where subject_appointment_id in
+                      (select id from public.appointments where remarks = $1)`, [TAG]);
+      await db.query(`delete from public.appointments where remarks = $1`, [TAG]);
+      return {
+        appointments: ids.length, timeOff: timeOff.size,
+        workingHours: workingHours.length, memberships: memberships.length,
+      };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// booking helpers — synthetic customer data only, never real customer details
+// ---------------------------------------------------------------------------
+export const SYNTHETIC_CUSTOMER = {
+  p_customer_name: 'TEST CUSTOMER A',
+  p_customer_phone: '+60000000001',
+  p_address_line: 'TEST ADDRESS A',
+  p_area_city: 'TEST CITY',
+};
+export const SYNTHETIC_PRIVATE_CUSTOMER = {
+  p_customer_name: 'TEST PRIVATE CUSTOMER Z',
+  p_customer_phone: '+60000009999',
+  p_address_line: 'TEST PRIVATE ADDRESS Z',
+  p_area_city: 'TEST PRIVATE CITY',
+};
+
+export const items = amount => [{ description: 'TEST SERVICE', quantity: 1, unit_price: amount }];
+
+export function bookingArgs({ ws, staff, date, time, amount, override = null, durationOverride = null,
+                              customer = SYNTHETIC_CUSTOMER, remarks = 'REGRESSION FIXTURE' }) {
+  return {
+    p_workspace_id: ws, p_staff_id: staff, ...customer,
+    p_appt_date: date, p_start_time: time, p_items: items(amount),
+    p_final_duration_override_min: durationOverride, p_remarks: remarks,
+    p_large_job_override_reason: override,
+  };
+}
+
+/** Create through the real RPC and register the result for teardown. */
+export async function book(fx, token, args) {
+  const r = await rpc('create_appointment', token, args);
+  if (r.ok) fx.track(r.body);
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// suite runner
+// ---------------------------------------------------------------------------
+export async function runSuite(suiteName, body) {
+  assertDevProject();
+  const db = await adminClient();
+  const ids = await resolveIdentities(db);
+  const fx = createFixture(db);
+  const rec = createRecorder(suiteName);
+  let summary;
+  try {
+    const T = await signInAll(ids);
+    await body({ db, ids, fx, rec, T });
+  } finally {
+    summary = rec.summary();
+    const removed = await fx.cleanup();
+    console.log(`fixture cleanup: ${removed.appointments} appointments, ${removed.timeOff} time-off, ` +
+      `${removed.workingHours} working-hours overrides, ${removed.memberships} membership changes`);
+    await db.end();
+  }
+  return summary;
+}

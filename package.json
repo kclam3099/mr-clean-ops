@@ -6,7 +6,12 @@
     "dev": "next dev --webpack",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:regression": "node supabase/tests/run-all.mjs",
+    "test:security": "node supabase/tests/security-regression.mjs",
+    "test:engine": "node supabase/tests/appointment-engine-regression.mjs",
+    "test:privacy": "node supabase/tests/cross-workspace-privacy-regression.mjs",
+    "db:reset-dev-fixtures": "node supabase/tests/reset-dev-fixtures.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -24,6 +29,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "pg": "^8.23.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
