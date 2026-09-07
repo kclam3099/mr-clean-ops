@@ -48,6 +48,7 @@ export default async function CalendarPage({
       {result.ok ? (
         <WeekCalendar
           appointments={result.appointments}
+          detailHrefFor={(id) => `/appointments/${id}`}
           range={range}
           // Only label the workspace when several are merged — in a single
           // workspace view the column would be the same value on every card.

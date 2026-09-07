@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { AgendaAppointment } from "@/lib/agenda/queries";
 
 /**
@@ -21,6 +22,7 @@ export function AppointmentCard({
   showWorkspace = false,
   showAmount = true,
   compact = false,
+  detailHref,
 }: {
   appointment: AgendaAppointment;
   /** Master views list who the job is assigned to; a staff agenda is all "me". */
@@ -29,6 +31,8 @@ export function AppointmentCard({
   showWorkspace?: boolean;
   showAmount?: boolean;
   compact?: boolean;
+  /** When given, the card body links through to the appointment detail. */
+  detailHref?: string;
 }) {
   const mapsHref = buildMapsHref(a);
 
@@ -36,6 +40,7 @@ export function AppointmentCard({
     <article
       className={`rounded-xl border border-slate-200 bg-white shadow-sm ${compact ? "p-3" : "p-4"}`}
     >
+      <CardLink href={detailHref}>
       <div className="flex items-start justify-between gap-2">
         {/* tabular-nums + nowrap so a time range never breaks across lines */}
         <p
@@ -97,6 +102,7 @@ export function AppointmentCard({
           ) : null}
         </div>
       ) : null}
+      </CardLink>
 
       {!compact ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -123,6 +129,20 @@ export function AppointmentCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * Makes the card body a link when a destination is given, and a plain wrapper
+ * otherwise. Kept separate so the Directions and Call buttons stay outside the
+ * link — nesting them would make a tap on either navigate instead.
+ */
+function CardLink({ href, children }: { href?: string; children: React.ReactNode }) {
+  if (!href) return <>{children}</>;
+  return (
+    <Link href={href} className="block rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900">
+      {children}
+    </Link>
   );
 }
 

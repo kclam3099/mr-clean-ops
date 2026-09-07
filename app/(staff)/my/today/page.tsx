@@ -33,6 +33,7 @@ export default async function TodayPage() {
       {result.ok ? (
         <AgendaList
           appointments={result.appointments}
+          detailHrefFor={(id) => `/my/appointments/${id}`}
           emptyMessage="Nothing scheduled today."
           showDateHeadings={false}
           // A merged identity-scoped agenda: every job is this person's own,

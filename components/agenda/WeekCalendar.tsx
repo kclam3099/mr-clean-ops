@@ -14,10 +14,12 @@ export function WeekCalendar({
   appointments,
   range,
   showWorkspace = false,
+  detailHrefFor,
 }: {
   appointments: AgendaAppointment[];
   range: DateRange;
   showWorkspace?: boolean;
+  detailHrefFor?: (id: string) => string;
 }) {
   const byDate = new Map(groupByDate(appointments).map((g) => [g.date, g.items]));
 
@@ -44,6 +46,7 @@ export function WeekCalendar({
                     showStaff
                     showWorkspace={showWorkspace}
                     compact
+                    detailHref={detailHrefFor?.(a.id)}
                   />
                 ))}
               </div>

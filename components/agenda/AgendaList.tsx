@@ -12,6 +12,7 @@ export function AgendaList({
   showWorkspace = false,
   showAmount = true,
   showDateHeadings = true,
+  detailHrefFor,
 }: {
   appointments: AgendaAppointment[];
   emptyMessage?: string;
@@ -19,6 +20,8 @@ export function AgendaList({
   showWorkspace?: boolean;
   showAmount?: boolean;
   showDateHeadings?: boolean;
+  /** Builds the detail link for a card; omit to render non-clickable cards. */
+  detailHrefFor?: (id: string) => string;
 }) {
   if (appointments.length === 0) {
     return (
@@ -47,6 +50,7 @@ export function AgendaList({
                 showStaff={showStaff}
                 showWorkspace={showWorkspace}
                 showAmount={showAmount}
+                detailHref={detailHrefFor?.(a.id)}
               />
             ))}
           </div>

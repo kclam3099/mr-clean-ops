@@ -76,7 +76,37 @@ caught immediately rather than silently degrading to "Something went wrong".
 
 ---
 
-## Phase O2 — F3 appointment detail / edit
+## Phase O2 — F3 appointment detail / edit — DONE
+
+Routes `/appointments/[id]` (Master) and `/my/appointments/[id]` (Staff), one
+shared `AppointmentDetailView`. Agenda and calendar cards now link through.
+
+**The privacy property.** `getAppointmentDetail` returns `null` for a hidden
+appointment, a nonexistent one, a malformed id and a read error alike — there is
+no branch that could tell them apart. Verified by comparing rendered pages:
+Nick opening Victor's real appointment id gets byte-identical visible text to a
+uuid that does not exist, and the copy says "not available", never "not
+authorized".
+
+**Actions.** Five Server Actions, each re-resolving the session and re-reading
+the appointment through RLS before touching anything. No direct table writes.
+The O1 audit shaped this directly: `update_appointment`,
+`update_appointment_items` and `reschedule_appointment` take an override reason;
+`cancel_appointment` and `mark_appointment_completed` do not, so those two never
+offer one.
+
+**Completion permission** comes from `get_booking_config().staffCanMarkCompleted`
+(0009), proven by toggling the setting and checking the button appears and
+disappears — not hard-coded.
+
+Terminal appointments render no mutation controls, and forged posts against them
+are refused by the RPC status guard as well.
+
+**F3 E2E: 40/40, 0 security failures** on the first full run.
+
+---
+
+## Phase O3 — operational dashboard polish
 
 **Status:** started.
 

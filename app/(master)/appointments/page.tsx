@@ -31,6 +31,7 @@ export default async function AppointmentsPage({
       {result.ok ? (
         <AgendaList
           appointments={result.appointments}
+          detailHrefFor={(id) => `/appointments/${id}`}
           emptyMessage="No appointments in the next 30 days."
           showStaff
           showWorkspace={scope.kind === "all"}

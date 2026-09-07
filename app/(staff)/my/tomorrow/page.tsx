@@ -23,6 +23,7 @@ export default async function TomorrowPage() {
       {result.ok ? (
         <AgendaList
           appointments={result.appointments}
+          detailHrefFor={(id) => `/my/appointments/${id}`}
           emptyMessage="Nothing scheduled tomorrow."
           showDateHeadings={false}
           showWorkspace={session.workspaces.length > 1}

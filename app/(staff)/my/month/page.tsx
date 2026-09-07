@@ -25,6 +25,7 @@ export default async function MonthPage() {
       {result.ok ? (
         <AgendaList
           appointments={result.appointments}
+          detailHrefFor={(id) => `/my/appointments/${id}`}
           emptyMessage="Nothing scheduled this month."
           showWorkspace={session.workspaces.length > 1}
         />
