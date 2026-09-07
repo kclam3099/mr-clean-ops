@@ -253,7 +253,11 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
     action: "call find_available_slots with p_total_amount",
     expected: "REJECT — no such function; the probe window cannot be varied",
     actual: withAmount.ok ? `ACCEPTED, ${withAmount.body.length} rows` : `HTTP ${withAmount.status}: ${withAmount.msg.slice(0, 70)}`,
-    ok: !withAmount.ok, security: true,
+    // Asserts the REASON, not merely that the call failed. A bare `!ok` would
+    // also be satisfied by a rate limit, an expired token or a transient 500 —
+    // this must pass only because the amount-taking signature no longer exists.
+    ok: withAmount.status === 404 && /could not find the function/i.test(withAmount.msg)
+        && /p_total_amount/.test(withAmount.msg), security: true,
   });
 
   // The sweep that used to work must now be impossible: every amount is refused,
@@ -261,7 +265,10 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
   const sweep = [];
   for (const amount of [200, 300, 301, 350, 400]) {
     const r = await find(T.nick, { p_staff_ids: [jack], p_from: dDur, p_to: dDur, p_total_amount: amount });
-    sweep.push(`${amount}:${r.ok ? "ACCEPTED" : "refused"}`);
+    // "refused" must mean "no such signature" specifically, so the sweep cannot
+    // read as green because the calls were failing for an unrelated reason.
+    const gone = r.status === 404 && /could not find the function/i.test(r.msg);
+    sweep.push(`${amount}:${r.ok ? "ACCEPTED" : gone ? "refused" : `failed-${r.status}`}`);
   }
   rec.check({
     id: "AV-15b amount sweep is impossible (CRITICAL)", actor: "NICK",

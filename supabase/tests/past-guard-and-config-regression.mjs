@@ -26,7 +26,6 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
   const scalar = async (expr, params = []) => (await fx.query(`select ${expr} v`, params))[0].v;
   const nowMyt = await scalar(`to_char((now() at time zone 'Asia/Kuala_Lumpur'),'YYYY-MM-DD HH24:MI')`);
   const today = nowMyt.slice(0, 10);
-  const hourNow = Number(nowMyt.slice(11, 13));
   const day = async (n) =>
     scalar(`to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD')`, [n]);
 
@@ -54,21 +53,18 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
     ok: !r1.ok && /must be in the future/i.test(r1.msg), security: true,
   });
 
-  if (hourNow >= 10) {
-    const r2 = track(await create(today, "09:00"));
-    rec.check({
-      id: "PG-02 earlier today DENIED", actor: "KC", setup: `it is ${nowMyt} MYT`,
-      action: `create on ${today} 09:00`, expected: "REJECT",
-      actual: r2.ok ? "CREATED" : r2.msg,
-      ok: !r2.ok && /must be in the future/i.test(r2.msg), security: true,
-    });
-  } else {
-    rec.check({
-      id: "PG-02 earlier today DENIED", actor: "KC", setup: "-",
-      action: "skipped: before 10:00 MYT, no past working hour exists today",
-      expected: "n/a", actual: "skipped", ok: true,
-    });
-  }
+  // Midnight today, rather than a hardcoded 09:00. The guard rejects
+  // `<= now()`, so today 00:00 is in the past at every moment of the day —
+  // including 00:00:00 itself. This check can therefore never be skipped,
+  // where the old 09:00 version silently recorded a pass without running
+  // whenever the suite started before 10:00 MYT.
+  const r2 = track(await create(today, "00:00"));
+  rec.check({
+    id: "PG-02 earlier today DENIED", actor: "KC", setup: `it is ${nowMyt} MYT`,
+    action: `create on ${today} 00:00`, expected: "REJECT",
+    actual: r2.ok ? "CREATED" : r2.msg,
+    ok: !r2.ok && /must be in the future/i.test(r2.msg), security: true,
+  });
 
   // "Later today" must be computed from the actual clock, not hardcoded — this
   // suite runs at any hour. 30 minutes ahead is always in the future; whether it
@@ -76,9 +72,11 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
   // guard let it through:
   //   inside 09:00-19:00  -> ALLOWED outright
   //   outside             -> rejected for WORKING HOURS, never for the past
+  // Clamped to 23:59 rather than abandoned near midnight, so the only moment
+  // this cannot run is the final minute of the day.
   const minutesNow = Number(nowMyt.slice(11, 13)) * 60 + Number(nowMyt.slice(14, 16));
-  const laterMinutes = minutesNow + 30;
-  if (laterMinutes < 24 * 60) {
+  const laterMinutes = Math.min(minutesNow + 30, 24 * 60 - 1);
+  if (laterMinutes > minutesNow) {
     const later = `${String(Math.floor(laterMinutes / 60)).padStart(2, "0")}:${String(laterMinutes % 60).padStart(2, "0")}`;
     const r3 = track(await create(today, later));
     // Asserts ONLY the past-guard property: a future time today is not rejected
@@ -94,10 +92,9 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
       ok: r3.ok || !/must be in the future/i.test(r3.msg),
     });
   } else {
-    rec.check({
-      id: "PG-03 later today passes the guard", actor: "KC", setup: `it is ${nowMyt} MYT`,
-      action: "skipped: within 30 minutes of midnight, no later time exists today",
-      expected: "n/a", actual: "skipped", ok: true,
+    rec.skip({
+      id: "PG-03 a future time today is not rejected as past", actor: "KC",
+      reason: `it is ${nowMyt} MYT — the final minute of the day, so no later time exists today`,
     });
   }
 
@@ -160,20 +157,14 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
       ok: !s1.ok && /must be in the future/i.test(s1.msg), security: true,
     });
 
-    if (hourNow >= 10) {
-      const s2 = await resched(today, "09:00");
-      rec.check({
-        id: "PG-09 reschedule to earlier today DENIED", actor: "KC", setup: `it is ${nowMyt} MYT`,
-        action: `reschedule to ${today} 09:00`, expected: "REJECT",
-        actual: s2.ok ? "MOVED" : s2.msg,
-        ok: !s2.ok && /must be in the future/i.test(s2.msg), security: true,
-      });
-    } else {
-      rec.check({
-        id: "PG-09 reschedule to earlier today DENIED", actor: "KC", setup: "-",
-        action: "skipped: before 10:00 MYT", expected: "n/a", actual: "skipped", ok: true,
-      });
-    }
+    // Midnight today for the same reason as PG-02: always in the past, never skipped.
+    const s2 = await resched(today, "00:00");
+    rec.check({
+      id: "PG-09 reschedule to earlier today DENIED", actor: "KC", setup: `it is ${nowMyt} MYT`,
+      action: `reschedule to ${today} 00:00`, expected: "REJECT",
+      actual: s2.ok ? "MOVED" : s2.msg,
+      ok: !s2.ok && /must be in the future/i.test(s2.msg), security: true,
+    });
 
     const s3 = await resched(yesterday, "11:00", "REGRESSION: override attempt");
     rec.check({

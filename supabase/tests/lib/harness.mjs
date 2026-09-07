@@ -165,7 +165,7 @@ export async function adminClient() {
 // ---------------------------------------------------------------------------
 export function createRecorder(suiteName) {
   const results = [];
-  let pass = 0, fail = 0, securityFail = 0;
+  let pass = 0, fail = 0, securityFail = 0, skipped = 0;
 
   function check({ id, actor = '-', setup = '-', action, expected, actual, ok, security = false }) {
     if (ok) {
@@ -182,9 +182,28 @@ export function createRecorder(suiteName) {
     return ok;
   }
 
+  /**
+   * A check that could not be evaluated in these conditions.
+   *
+   * It is deliberately NOT a pass. Recording a skip as green is how a suite
+   * comes to report full marks while a property was never exercised — the
+   * time-of-day branches in the past-guard suite did exactly that.
+   */
+  function skip({ id, actor = '-', reason }) {
+    skipped++;
+    results.push({ suite: suiteName, id, actor, skipped: true, reason });
+    console.log(`[SKIP] ${id} (${actor}) :: ${reason}`);
+    return false;
+  }
+
   function summary() {
-    console.log(`\n########## ${suiteName}: ${pass} PASS / ${fail} FAIL (security failures: ${securityFail}) ##########`);
-    const bad = results.filter(r => !r.ok);
+    console.log(`\n########## ${suiteName}: ${pass} PASS / ${fail} FAIL` +
+      `${skipped ? ` / ${skipped} SKIPPED` : ''} (security failures: ${securityFail}) ##########`);
+    if (skipped) {
+      console.log('\nSKIPPED (not counted as passes):');
+      for (const s of results.filter(r => r.skipped)) console.log(`  ${s.id} — ${s.reason}`);
+    }
+    const bad = results.filter(r => !r.skipped && !r.ok);
     if (bad.length) {
       console.log('\nFAILED:');
       for (const f of bad) {
@@ -193,10 +212,10 @@ export function createRecorder(suiteName) {
         console.log(`      actual  : ${f.actual}`);
       }
     }
-    return { suite: suiteName, pass, fail, securityFail, results };
+    return { suite: suiteName, pass, fail, securityFail, skipped, results };
   }
 
-  return { check, summary, get counts() { return { pass, fail, securityFail }; } };
+  return { check, skip, summary, get counts() { return { pass, fail, securityFail, skipped }; } };
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +296,28 @@ export function createFixture(db) {
         if (rows[0].n === 0) { usedDates.add(iso); return iso; }
       }
       throw new Error('no free date available for fixture');
+    },
+
+    /**
+     * Throw if `staffId` already has something booked on `date`.
+     *
+     * Suites that pick a date by fixed offset (`today + 70`) rather than via
+     * freeDate() are only safe while nothing else occupies that slot. Today
+     * the DEV baseline holds no appointments at all, so they are — but that is
+     * a property of the current data, not of the test. This turns a future
+     * collision into a clear failure at the point of setup instead of a
+     * puzzling PHYSICAL_OVERLAP several assertions later.
+     */
+    async requireFree(staffId, date, label = '') {
+      const { rows } = await db.query(
+        `select count(*)::int n from public.appointments
+          where staff_id = $1 and appt_date = $2 and status = 'booked'`, [staffId, date]);
+      if (rows[0].n > 0) {
+        throw new Error(
+          `fixture date collision${label ? ` (${label})` : ''}: staff already has ` +
+          `${rows[0].n} appointment(s) on ${date}. Reset the DEV baseline, or use fx.freeDate().`);
+      }
+      return date;
     },
 
     /** Server-computed columns, for assertions the API does not expose. */
@@ -374,6 +415,18 @@ export async function runSuite(suiteName, body) {
   const rec = createRecorder(suiteName);
   let summary;
   try {
+    // Isolation is asserted, not assumed. Fixture rows left behind by an
+    // earlier suite would otherwise show up as overlaps and availability gaps
+    // inside this one, and the failure would point anywhere but the cause.
+    const { rows: before } = await db.query(
+      `select count(*)::int n from public.appointments where remarks = $1`, [fx.TAG]);
+    rec.check({
+      id: 'ISO-01 suite starts isolated', actor: 'harness', setup: '-',
+      action: 'count leftover fixture rows before running',
+      expected: '0 — the previous suite cleaned up after itself',
+      actual: `${before[0].n} row(s)`, ok: before[0].n === 0,
+    });
+
     const T = await signInAll(ids);
     await body({ db, ids, fx, rec, T });
   } catch (error) {
@@ -388,10 +441,22 @@ export async function runSuite(suiteName, body) {
       ok: false,
     });
   } finally {
-    summary = rec.summary();
     const removed = await fx.cleanup();
     console.log(`fixture cleanup: ${removed.appointments} appointments, ${removed.timeOff} time-off, ` +
       `${removed.workingHours} working-hours overrides, ${removed.memberships} membership changes`);
+
+    // Teardown is verified rather than trusted — including after a crash,
+    // which is exactly when a suite is most likely to leave rows behind.
+    const { rows: after } = await db.query(
+      `select count(*)::int n from public.appointments where remarks = $1`, [fx.TAG]);
+    rec.check({
+      id: 'ISO-02 suite left nothing behind', actor: 'harness', setup: '-',
+      action: 'count fixture rows after teardown',
+      expected: '0 — the next suite must start from the same baseline this one did',
+      actual: `${after[0].n} row(s)`, ok: after[0].n === 0,
+    });
+
+    summary = rec.summary();
     await db.end();
   }
   return summary;

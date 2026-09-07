@@ -212,3 +212,89 @@ Both parts were wrong:
 Privacy was not re-tested per viewport: the RSC payload does not vary by
 viewport width, so a per-width repeat would add passes without adding evidence.
 
+
+## Phase O6 — regression hardening — DONE
+
+The theme of this phase is that a green suite is only worth what its weakest
+assertion is worth. Four classes of weakness were found and closed.
+
+### 1. Skips were being recorded as passes
+
+`past-guard-and-config-regression` had three branches shaped like
+
+```js
+if (hourNow >= 10) { ...the real check... }
+else { rec.check({ action: "skipped: before 10:00 MYT", ok: true }); }
+```
+
+Run before 10:00 MYT, the suite reported full marks while never exercising the
+guard. **This run started at 01:42 MYT, so two of those three were in their
+skipped window** — the suite would have claimed a pass for the "earlier today
+is rejected" property without testing it at all.
+
+Fixed at both levels:
+
+- **The recorder now has `skip()`**, which counts as neither a pass nor a
+  fail, prints `[SKIP]`, and is listed separately under "SKIPPED (not counted
+  as passes)". Verified end to end: one check plus one skip yields
+  `1 PASS / 0 FAIL / 1 SKIPPED`.
+- **`run-all` surfaces it in the verdict.** A skip cannot appear in an exit
+  code, so a verdict built from exit codes alone would print "All suites
+  passed" over an unexercised property. It now captures each suite's output as
+  well as echoing it, and annotates the verdict line.
+
+Then most of the skipping was removed outright, by choosing inputs that hold at
+every hour rather than inputs that need a favourable clock:
+
+- **PG-02 / PG-09** now use **today at 00:00**. The guard rejects `<= now()`,
+  so midnight today is in the past at every instant of the day — including
+  00:00:00 itself. These can never be skipped again.
+- **PG-03** clamps "30 minutes from now" to 23:59, shrinking its unrunnable
+  window from 30 minutes a day to the final minute, and calls `rec.skip()`
+  rather than claiming a pass when it lands there.
+
+### 2. Security checks that passed without reaching the guard
+
+`SEC-13` asserted only `!r.ok` for five privileged mutations attempted by a
+no-profile identity. Any failure satisfied that — a type error, an expired
+token, a rate limit — so the check could go green while the authorization code
+never ran. It now asserts the message is an authorization refusal.
+
+This was not hypothetical. **`SEC-13b` was added to prove it**: the same call
+with its casts removed fails with `function public.set_staff_working_hours(
+unknown, integer, unknown, unknown) does not exist` — dead in overload
+resolution, nowhere near a guard. Under the old assertion that was a security
+pass. The trap had already been noted in a code comment; it is now an executed
+check that fails if anyone reintroduces it.
+
+`AV-15` had the same shape: `!withAmount.ok` for the removed amount-taking
+signature. It now requires HTTP 404 *and* `could not find the function` *and*
+`p_total_amount` in the message, so it can only pass because the signature is
+genuinely gone. `AV-15b`'s sweep likewise distinguishes "refused" from
+"failed-500".
+
+### 3. Fixture isolation was assumed rather than asserted
+
+Every suite now runs `ISO-01` before its body and `ISO-02` after teardown —
+fourteen new checks confirming no fixture rows exist on entry and none survive
+on exit. `ISO-02` runs inside `finally`, so it still reports after a crash,
+which is precisely when a suite is most likely to leave rows behind.
+
+### 4. Fixed-offset dates could collide silently
+
+Several suites pick dates as `today + 70` rather than through `freeDate()`, and
+they must: the working-hours cases are weekday-sensitive, where `d` and `d + 7`
+have to share a weekday for one window to govern both. That is only safe while
+the slot is empty. The DEV baseline holds **zero** appointments today, so it is
+— but that is a property of the current data, not of the test, and a collision
+would surface as a baffling `PHYSICAL_OVERLAP` several assertions downstream.
+
+`fx.requireFree(staff, date, label)` now turns that into an immediate, named
+failure at the point of setup, and the working-hours suite checks both staff it
+books on every date it derives.
+
+### Result
+
+Backend regression grew from **189 to 204 checks**, all passing — and the
+fifteen new ones are all of the kind that make the other 189 mean something.
+

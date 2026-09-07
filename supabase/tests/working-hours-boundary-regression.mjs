@@ -29,8 +29,18 @@ const summary = await runSuite("WORKING-HOURS BOUNDARY REGRESSION", async ({ ids
   const shared = ids.ws.shared;
   const { dyron, jack } = ids.staff;
 
-  const day = async (n) => (await fx.query(
-    `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
+  // Dates here are fixed offsets rather than freeDate() results, because the
+  // cases are weekday-sensitive: `d` and `d + 7` must land on the same day of
+  // the week for a single working-hours window to govern both. That safety
+  // depends on the slot being empty, so assert it instead of hoping — this
+  // suite books only Dyron and Jack, so checking both covers every call site.
+  const day = async (n) => {
+    const d = (await fx.query(
+      `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
+    await fx.requireFree(dyron, d, `working-hours day(${n}) / Dyron`);
+    await fx.requireFree(jack, d, `working-hours day(${n}) / Jack`);
+    return d;
+  };
   const dowOf = async (date) => (await fx.query(`select extract(dow from $1::date)::int d`, [date]))[0].d;
 
   /** Remove any staff-specific window on that weekday, so company defaults apply. */

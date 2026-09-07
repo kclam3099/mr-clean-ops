@@ -225,10 +225,32 @@ const summary = await runSuite('SECURITY REGRESSION', async ({ db, ids, fx, rec,
     const r = await asOrphan(sql, params);
     rec.check({
       id: `SEC-13 no-profile cannot ${label}`, actor: 'authenticated/no-profile', setup: '-',
-      action: `call ${label}()`, expected: 'raises — must fail closed, not fall through',
-      actual: r.ok ? 'SUCCEEDED' : r.error.split('\n')[0], ok: !r.ok, security: true,
+      action: `call ${label}()`,
+      expected: 'raises an AUTHORIZATION error — fails closed, not on a type or arity slip',
+      actual: r.ok ? 'SUCCEEDED' : r.error.split('\n')[0],
+      // Asserting the reason matters here more than anywhere else in this file:
+      // a bare `!ok` is satisfied by an argument-type or overload-resolution
+      // error raised long before the guard is reached, so the check would go
+      // green while proving nothing. That very trap is why the
+      // set_staff_working_hours probe above has to cast its nulls.
+      ok: !r.ok && /not authorized|only (a |super )?master/i.test(r.error), security: true,
     });
   }
+
+  // The probes above are only meaningful if they actually reach the guard, so
+  // prove the failure mode they are written to avoid is real: the same call
+  // WITHOUT its casts dies in overload resolution, before any authorization
+  // code runs. A `!r.ok` assertion would have called that a security pass.
+  const uncast = await asOrphan(`select public.set_staff_working_hours(null, 1, '08:00', '20:00')`);
+  rec.check({
+    id: 'SEC-13b an uncast probe never reaches the guard', actor: 'authenticated/no-profile',
+    setup: 'the same call as above, with its casts removed',
+    action: 'call set_staff_working_hours() with untyped nulls',
+    expected: 'fails on overload resolution, NOT on authorization — which is why SEC-13 '
+            + 'asserts the message and not merely that the call failed',
+    actual: uncast.ok ? 'SUCCEEDED' : uncast.error.split('\n')[0],
+    ok: !uncast.ok && !/not authorized|only (a |super )?master/i.test(uncast.error),
+  });
 
   const orphanReads = ['appointments', 'profiles', 'staff', 'workspaces', 'audit_logs'];
   for (const tbl of orphanReads) {

@@ -23,19 +23,33 @@ const SUITES = [
 const results = [];
 for (const [file, label] of SUITES) {
   console.log(`\n${'='.repeat(72)}\n>>> ${label}\n${'='.repeat(72)}`);
+  // Output is echoed AND captured: a skipped check is not a failure, so it
+  // cannot show up in the exit code, and a verdict that only reads exit codes
+  // would report "All suites passed" while a property went unexercised.
+  let out = '';
   const code = await new Promise(done => {
     const p = spawn(process.execPath,
       ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', resolve(HERE, `${file}.mjs`)],
-      { stdio: 'inherit' });
+      { stdio: ['inherit', 'pipe', 'pipe'] });
+    for (const stream of [p.stdout, p.stderr]) {
+      stream.on('data', chunk => { out += chunk; process.stdout.write(chunk); });
+    }
     p.on('close', done);
   });
-  results.push({ file, label, code });
+  const skipped = Number(/\/ (\d+) SKIPPED/.exec(out)?.[1] ?? 0);
+  results.push({ file, label, code, skipped });
 }
 
 console.log(`\n${'='.repeat(72)}\nREGRESSION SUITE VERDICT\n${'='.repeat(72)}`);
 for (const r of results) {
-  console.log(`  ${r.code === 0 ? 'PASS' : 'FAIL'}  ${r.label}  (${r.file})`);
+  const skips = r.skipped ? `  [${r.skipped} SKIPPED]` : '';
+  console.log(`  ${r.code === 0 ? 'PASS' : 'FAIL'}  ${r.label}  (${r.file})${skips}`);
 }
 const failed = results.filter(r => r.code !== 0);
+const skippedTotal = results.reduce((n, r) => n + r.skipped, 0);
 console.log(failed.length ? `\n${failed.length} suite(s) FAILED` : '\nAll suites passed.');
+if (skippedTotal) {
+  console.log(`${skippedTotal} check(s) were SKIPPED and are NOT counted as passes — ` +
+    `see the [SKIP] lines above for why.`);
+}
 process.exit(failed.length ? 1 : 0);
