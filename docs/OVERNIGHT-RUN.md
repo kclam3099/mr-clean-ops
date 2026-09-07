@@ -298,3 +298,29 @@ books on every date it derives.
 Backend regression grew from **189 to 204 checks**, all passing — and the
 fifteen new ones are all of the kind that make the other 189 mean something.
 
+
+---
+
+## End-of-run full gate — PASSED
+
+| Gate | Result |
+| --- | --- |
+| Secret scan (tree + full git history) | **CLEAN** — no JWT, service-role key or credentialed connection string in any blob of any commit. `SUPABASE_SERVICE_ROLE_KEY` appears only as a variable *name*; `.env.example` is the only tracked env file and its values are empty. |
+| Service-role reachability | `lib/supabase/adminClient.ts` has **zero importers** in `app/`, `lib/` or `components/`, and is guarded by `import "server-only"`. No browser or server-user path can reach it. |
+| Lint | clean |
+| Build | passes |
+| Unit | 16/16 |
+| Backend regression | **204/204**, 0 security failures, 0 skipped |
+| Cross-user browser privacy | 24/24 |
+| F2 E2E (add appointment) | 46/46 |
+| F3 E2E (detail + lifecycle) | 44/44 |
+| Responsive / UX QA | 65/65 |
+| Git migrations vs DEV history | **identical** — 0001…0009, same order, same names |
+| Migrations 0001–0008 | **unmodified**; last touched before this run began. 0009 was *added*, never an edit to a locked file |
+| DEV baseline | reset and verified — 18/18 baseline assertions OK, 0 appointments |
+| Working tree | clean, level with `origin/main` |
+| Real customer data | none — every fixture is `TEST_*` / `*.dev.test` |
+
+**Final HEAD:** `3679c73` *Phase 6: regression hardening*
+
+**Total: 399 automated checks green.**
