@@ -16,6 +16,7 @@ const SUITES = [
   ['cross-workspace-privacy-regression', 'Cross-workspace privacy'],
   ['availability-finder-regression', 'Availability finder (0006 + 0007)'],
   ['past-guard-and-config-regression', 'Past-datetime guard + booking config (0007)'],
+  ['working-hours-boundary-regression', 'Working-hours midnight boundary (0008)'],
 ];
 
 const results = [];
