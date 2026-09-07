@@ -1,7 +1,14 @@
+import { createBrowserClient } from "@supabase/ssr";
+
 /**
- * Browser-side Supabase client factory — anon key only, safe to ship to
- * the client bundle. Real implementation (via @supabase/ssr) lands with
- * Phase 1 Build Plan step 4 (auth), once NEXT_PUBLIC_SUPABASE_URL and
- * NEXT_PUBLIC_SUPABASE_ANON_KEY are wired up as Vercel env vars.
+ * Browser-side Supabase client — anon/publishable key only, safe to ship
+ * to the client bundle. Every query still runs through Row Level Security
+ * as the signed-in user (Blueprint v0.2 §F); this client has no elevated
+ * access of its own.
  */
-export {};
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+}
