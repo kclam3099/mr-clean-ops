@@ -11,6 +11,7 @@
     "test:e2e:privacy": "node tests/e2e/cross-user-privacy.test.mjs",
     "test:e2e:f2": "node tests/e2e/add-appointment.test.mjs",
     "test:e2e:f3": "node tests/e2e/appointment-detail.test.mjs",
+    "test:e2e:qa": "node tests/e2e/responsive-qa.test.mjs",
     "test:availability": "node supabase/tests/availability-finder-regression.mjs",
     "test:past-guard": "node supabase/tests/past-guard-and-config-regression.mjs",
     "test:working-hours": "node supabase/tests/working-hours-boundary-regression.mjs",

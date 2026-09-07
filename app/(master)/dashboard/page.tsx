@@ -77,9 +77,11 @@ export default async function DashboardPage({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Tomorrow</h2>
+          {/* -my-2 keeps the header row the same height while the padding
+              gives the link a thumb-sized tap area on a phone. */}
           <Link
             href={scopedHref("/calendar", scope, hasChoice)}
-            className="text-sm text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+            className="-my-2 py-2 text-sm text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
           >
             Open calendar
           </Link>
@@ -138,7 +140,7 @@ function ByStaff({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
         <Link
           href={scopedHref("/appointments", scope, hasChoice)}
-          className="text-sm text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
+          className="-my-2 py-2 text-sm text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline"
         >
           All appointments
         </Link>

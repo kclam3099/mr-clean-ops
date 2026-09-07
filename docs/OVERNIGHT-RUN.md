@@ -159,3 +159,56 @@ exposed through `get_booking_config` — when they are populated, this becomes
 the fallback rather than the only option.
 
 ---
+
+## Phase O5 — visual / UX QA — DONE
+
+Screenshots are uncapturable this session, so the QA pass was written as
+measurements rather than eyeballing: `tests/e2e/responsive-qa.test.mjs` loads
+all nine routes as both a master and a staff member at 390px, 768px and 1440px
+and asserts against the rendered geometry. **65 checks, all passing.**
+
+What it measures, and why each one is the thing that actually breaks:
+
+- **Horizontal overflow** — `scrollWidth > clientWidth` on every route at every
+  width, and when it fails it names the offending elements. A single wide
+  `<select>`, table or long unbroken address is the usual cause, and on a phone
+  it is invisible to whoever built the page on a laptop.
+- **Tap-target height** — every `button`, `a[href]`, `select` and `input` at
+  390px must be at least 32px tall.
+- **Content actually rendered** — guards against a route that only ever shows
+  its skeleton, which would otherwise make the two checks above pass vacuously.
+- **Dialog semantics** — the cancel confirmation must carry `aria-modal`, be
+  labelled, fit inside the viewport, and offer a way out as well as a way
+  through.
+- **Empty state** — asserted against a staff member confirmed by query to have
+  nothing booked today, rather than one assumed to be free.
+
+The fixture is a deliberately hostile one: a 55-character customer name and a
+long Jalan address, since truncation defects only appear with real-length data.
+
+### Defect found and fixed
+
+**Dashboard section links were 20px tall at 390px** — "All appointments" and
+"Open calendar" sit beside their section headings and are the primary way to
+reach the full lists on a phone, but as bare inline text they were half the
+minimum comfortable tap size. Fixed with `-my-2 py-2`, which grows the hit area
+to 36px while the negative margin keeps the header row exactly the same height —
+no visual change, a target twice the size.
+
+### Test defect found and fixed (the product was correct)
+
+`/my/month` failed once with `net::ERR_ABORTED`, and the suite crashed on it.
+Both parts were wrong:
+
+- The route is fine — three consecutive direct loads all succeeded. `next dev`
+  compiles routes on demand, and the first compile racing an in-flight prefetch
+  aborts the navigation. A dev-server artefact, not a product defect, so the
+  navigation now retries once.
+- More importantly the crash abandoned every remaining check, so the run would
+  have looked *shorter* rather than *failed*. A navigation that fails twice is
+  now recorded as a failed check and the suite continues — the same class of
+  bug as the "0 PASS / 0 FAIL" trap fixed earlier tonight.
+
+Privacy was not re-tested per viewport: the RSC payload does not vary by
+viewport width, so a per-width repeat would add passes without adding evidence.
+
