@@ -324,3 +324,100 @@ fifteen new ones are all of the kind that make the other 189 mean something.
 **Final HEAD:** `3679c73` *Phase 6: regression hardening*
 
 **Total: 399 automated checks green.**
+
+---
+
+## Post-overnight reconciliation audit
+
+### Correction: the availability finder IS connected
+
+The morning report claimed `find_available_slots` was *"fully built, privacy-safe
+and completely unused by the frontend."* **That was wrong**, and it was wrong
+about F2, which was approved and shipped with the finder wired in.
+
+The error came from conflating two different things: the **`/availability`
+route** is still a Phase-1 scaffold placeholder, but the **finder itself** has
+been live inside both booking forms since F2. A placeholder page is not an
+unused RPC.
+
+No product code was changed. The evidence, gathered at `e41c216`:
+
+| Reference | Location |
+| --- | --- |
+| `find_available_slots` | `lib/appointments/actions.ts:137` · `lib/appointments/lifecycle-actions.ts:253` |
+| `findAvailabilityAction` | defined `lib/appointments/actions.ts:116`, called `AppointmentForm.tsx:93` |
+| `AvailabilitySuggestions` | defined `AvailabilitySuggestions.tsx:14`, rendered `AppointmentForm.tsx:251` |
+| `/appointments/new` | renders `AppointmentForm` (`page.tsx:65`) → calls the finder |
+| `/my/appointments/new` | renders `AppointmentForm` (`page.tsx:59`) → calls the finder |
+
+**Live proof, not code reading.** `pg_stat_statements` was reset immediately
+before driving the real UI, and the statement Postgres actually executed was:
+
+```
+"public"."find_available_slots"("p_staff_ids" := …, "p_from" := …,
+                                "p_to" := …, "p_workspace_id" := …)
+```
+
+Exactly the four 0007 arguments. No `p_total_amount`, no numeric argument.
+
+**The chips are not hard-coded.** A differential settles it: KC saw
+`10:00, 13:00, 15:00`; one appointment was then booked at 10:00 directly through
+the RPC; on reload the chips read `13:00, 15:00`. A static or client-derived
+list cannot do that.
+
+**0007 semantics intact.** `AppointmentForm`'s availability effect keys on
+`workspaceId|staffId|date` only — `total` is deliberately excluded, with the
+reason in a comment. Changing the item total triggers no availability request
+(`AVAIL-03`), and no request carries an amount (`AVAIL-04`). An unauthorised
+staff/workspace pairing returns **empty slots rather than an error**, which is
+the same answer a genuinely empty schedule gives.
+
+### Feature-phase ledger
+
+The overnight log numbers its own phases `O1…O6`. Those are *run* phases and do
+not line up with *feature* phases, which caused the next-phase name to collide.
+The authoritative feature ledger:
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| F1 | Login, session, role-aware navigation, shared agenda | DONE |
+| F2 | Add Appointment (incl. availability suggestions) | DONE |
+| F3 | Appointment detail, edit and lifecycle | DONE |
+| F4 | Operational dashboard polish (+ WhatsApp/Maps deep links) | DONE |
+| **F5** | **Calendar Operations / Availability UX** | **NEXT — not started** |
+
+Historical commit messages are left as they are.
+
+### Authoritative route / feature map
+
+| Route | Role | State |
+| --- | --- | --- |
+| `/login` | public | **IMPLEMENTED** |
+| `/` | any | **IMPLEMENTED** — redirects by role |
+| `/dashboard` | master | **IMPLEMENTED** — Master home, first nav item |
+| `/calendar` | master | **IMPLEMENTED** — week view, prev/this/next, scope-aware |
+| `/appointments` | master | **PARTIAL** — fixed next-30-days list; no filter, search or paging |
+| `/appointments/new` | master | **IMPLEMENTED** |
+| `/appointments/[id]` | master | **IMPLEMENTED** — detail + full lifecycle |
+| `/availability` | master | **PLACEHOLDER** — Phase-1 scaffold (the RPC behind it is live in F2) |
+| `/staff` | master | **PLACEHOLDER** |
+| `/staff/[id]` | master | **PLACEHOLDER** |
+| `/reports/monthly` | master | **PLACEHOLDER** |
+| `/settings` | super_master | **PLACEHOLDER** |
+| `/audit` | master | **PLACEHOLDER** — not in the nav |
+| `/my/today` | staff | **IMPLEMENTED** — staff home |
+| `/my/tomorrow` | staff | **IMPLEMENTED** |
+| `/my/month` | staff | **IMPLEMENTED** |
+| `/my/appointments/new` | staff | **IMPLEMENTED** |
+| `/my/appointments/[id]` | staff | **IMPLEMENTED** — own appointments only |
+
+### Landing routes, measured with real logins
+
+| Identity | After login | `/` | Nav |
+| --- | --- | --- | --- |
+| KC (super_master) | `/dashboard` | `/dashboard` | Today · Calendar · Appointments · Staff · Availability · Reports · Settings |
+| Nick (partner_master) | `/dashboard` | `/dashboard` | same, **no Settings** |
+| Jack (staff) | `/my/today` | `/my/today` | Today · Tomorrow · Month |
+| Victor (staff) | `/my/today` | `/my/today` | Today · Tomorrow · Month |
+
+Consistent with the report — no routing inconsistency, and nothing was changed.
