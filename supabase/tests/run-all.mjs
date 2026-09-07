@@ -17,13 +17,16 @@ const SUITES = [
   ['availability-finder-regression', 'Availability finder (0006 + 0007)'],
   ['past-guard-and-config-regression', 'Past-datetime guard + booking config (0007)'],
   ['working-hours-boundary-regression', 'Working-hours midnight boundary (0008)'],
+  ['error-mapping-coverage-regression', 'Privacy-safe error mapping coverage'],
 ];
 
 const results = [];
 for (const [file, label] of SUITES) {
   console.log(`\n${'='.repeat(72)}\n>>> ${label}\n${'='.repeat(72)}`);
   const code = await new Promise(done => {
-    const p = spawn(process.execPath, [resolve(HERE, `${file}.mjs`)], { stdio: 'inherit' });
+    const p = spawn(process.execPath,
+      ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', resolve(HERE, `${file}.mjs`)],
+      { stdio: 'inherit' });
     p.on('close', done);
   });
   results.push({ file, label, code });

@@ -195,7 +195,15 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
   // ==========================================================================
   // C. get_booking_config
   // ==========================================================================
-  const EXPECTED_FIELDS = ["rm_per_hour_rate", "default_buffer_minutes", "default_availability_job_duration_minutes"];
+  // 0009 added staff_can_mark_completed: mark_appointment_completed enforces
+  // that setting for staff, but staff cannot read business_settings, so the UI
+  // had no honest way to decide whether to render a Complete action.
+  const EXPECTED_FIELDS = [
+    "rm_per_hour_rate",
+    "default_buffer_minutes",
+    "default_availability_job_duration_minutes",
+    "staff_can_mark_completed",
+  ];
 
   for (const [who, token] of [["KC", T.kc], ["NICK", T.nick], ["JACK", T.jack],
                               ["DYRON", T.dyron], ["VICTOR", T.victor]]) {
@@ -205,7 +213,7 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
       id: `CFG-01 ${who} can read booking config`, actor: who,
       setup: "business_settings itself is not readable by staff",
       action: "call get_booking_config()",
-      expected: "exactly the three booking fields",
+      expected: `exactly the ${EXPECTED_FIELDS.length} booking fields`,
       actual: r.ok ? JSON.stringify(row) : r.msg,
       ok: r.ok && row && EXPECTED_FIELDS.every((f) => f in row)
           && Object.keys(row).length === EXPECTED_FIELDS.length,
@@ -214,14 +222,17 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
 
   const cfg = await rpc("get_booking_config", T.jack, {});
   const cfgRow = Array.isArray(cfg.body) ? cfg.body[0] : cfg.body;
+  // staff_can_mark_completed is now deliberately exposed (0009). Everything
+  // else stays out: the threshold would let the UI pre-judge overrides, and the
+  // day window is overridden by staff-specific hours.
   const forbidden = ["full_day_lock_threshold", "default_day_start", "default_day_end",
-                     "staff_can_mark_completed", "wa_reminder_template_en",
-                     "wa_reminder_template_zh", "wa_reminder_template_ms", "updated_at"];
+                     "wa_reminder_template_en", "wa_reminder_template_zh",
+                     "wa_reminder_template_ms", "updated_at"];
   const exposed = forbidden.filter((f) => cfgRow && f in cfgRow);
   rec.check({
     id: "CFG-02 no unrelated settings exposed (CRITICAL)", actor: "JACK", setup: "-",
     action: "check the payload for fields outside the booking scope",
-    expected: "none of the threshold, day window, completion flag or WA templates",
+    expected: "none of the threshold, day window or WA templates",
     actual: exposed.length ? `EXPOSED: ${exposed.join(", ")}` : "none",
     ok: exposed.length === 0, security: true,
   });

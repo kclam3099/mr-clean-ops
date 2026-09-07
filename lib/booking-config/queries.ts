@@ -21,12 +21,21 @@ export type BookingConfig = {
   rmPerHourRate: number;
   defaultBufferMinutes: number;
   defaultAvailabilityDurationMinutes: number;
+  /**
+   * Whether staff may mark their own appointments completed (migration 0009).
+   * mark_appointment_completed enforces this itself; the flag only decides
+   * whether to render the action, so the UI does not offer something the
+   * server will refuse.
+   */
+  staffCanMarkCompleted: boolean;
 };
 
 const FALLBACK: BookingConfig = {
   rmPerHourRate: 200,
   defaultBufferMinutes: 30,
   defaultAvailabilityDurationMinutes: 60,
+  // Fail closed: if the config cannot be read, do not offer completion.
+  staffCanMarkCompleted: false,
 };
 
 export const getBookingConfig = cache(async (): Promise<BookingConfig> => {
@@ -47,5 +56,6 @@ export const getBookingConfig = cache(async (): Promise<BookingConfig> => {
     defaultAvailabilityDurationMinutes:
       Number(row.default_availability_job_duration_minutes) ||
       FALLBACK.defaultAvailabilityDurationMinutes,
+    staffCanMarkCompleted: row.staff_can_mark_completed === true,
   };
 });

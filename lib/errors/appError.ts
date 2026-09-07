@@ -25,6 +25,8 @@ export const AppErrorCode = {
   PHYSICAL_OVERLAP: "PHYSICAL_OVERLAP",
   OUTSIDE_WORKING_HOURS: "OUTSIDE_WORKING_HOURS",
   TIME_OFF: "TIME_OFF",
+  PAST_DATETIME: "PAST_DATETIME",
+  BLOCKING_APPOINTMENTS: "BLOCKING_APPOINTMENTS",
   NOT_AUTHORIZED: "NOT_AUTHORIZED",
   INVALID_APPOINTMENT_STATE: "INVALID_APPOINTMENT_STATE",
   VALIDATION_ERROR: "VALIDATION_ERROR",
@@ -65,6 +67,9 @@ const MESSAGES: Record<AppErrorCode, string> = {
     "That time overlaps an existing appointment. Overlapping bookings are never allowed.",
   OUTSIDE_WORKING_HOURS: "That time is outside working hours.",
   TIME_OFF: "This team member is on time off then.",
+  PAST_DATETIME: "That time has already passed. Please choose a future date and time.",
+  BLOCKING_APPOINTMENTS:
+    "There are upcoming appointments that need to be moved or cancelled first.",
   NOT_AUTHORIZED: "You do not have permission to do that.",
   INVALID_APPOINTMENT_STATE:
     "This appointment can no longer be changed because it is completed or cancelled.",
@@ -106,19 +111,35 @@ const RULES: Array<{
       return hit ? { windowStart: hit[1], windowEnd: hit[2] } : {};
     },
   },
-  { code: AppErrorCode.TIME_OFF, test: /\btime off\b|\bfull day off\b/i },
-
+  // Authorization is tested BEFORE time-off. "Only a Master may set staff time
+  // off" is an authorization failure, but it contains the words "time off", so
+  // the looser rule below would otherwise claim it and tell the user the staff
+  // member is unavailable — misleading, and wrong.
   {
     code: AppErrorCode.NOT_AUTHORIZED,
-    test: /^Not authorized\b|^Only (a )?(Super Master|Master)\b|may not (override|perform)\b|^Not an active member\b|^Not authorized for this workspace\b|^No staff profile\b/i,
+    test: /^Not authorized\b|^Only (a )?(Super Master|Master)\b|may not (override|perform)\b|^Not an active member\b|^No staff profile\b|^Not your appointment\b|^Appointment not found\b|^Staff completion is currently disabled\b|^Moving an appointment to a different workspace\b/i,
   },
+
+  { code: AppErrorCode.TIME_OFF, test: /\btime off\b|\bfull day off\b/i },
+
+  // The past-datetime guard from 0007. Worth its own code: "please check the
+  // details" is useless when the real problem is that the time has gone.
+  { code: AppErrorCode.PAST_DATETIME, test: /^Appointment must be in the future\b/i },
+
+  // Staff/workspace administration is blocked by real upcoming work. Actionable
+  // and non-disclosing: it names no appointment, customer or time.
+  {
+    code: AppErrorCode.BLOCKING_APPOINTMENTS,
+    test: /^Staff has upcoming booked appointments\b|^Conflicts with an existing booked appointment\b/i,
+  },
+
   {
     code: AppErrorCode.INVALID_APPOINTMENT_STATE,
     test: /^Only a booked appointment can be\b/i,
   },
   {
     code: AppErrorCode.VALIDATION_ERROR,
-    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b/i,
+    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b|^Invalid range\b|^Range too large\b|^Invalid amount\b|^start_time must be before end_time\b|^start_time and end_time must both be\b|^Already an active member\b|^No active membership found to end\b|^Not found\b/i,
   },
 ];
 

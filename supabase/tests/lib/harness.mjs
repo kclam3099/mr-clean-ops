@@ -9,7 +9,8 @@
 // Every suite creates its own fixture and removes it in a finally block. No
 // suite may depend on data left behind by another suite or by an earlier run.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import pg from 'pg';
@@ -64,14 +65,57 @@ export function assertDevProject() {
 // ---------------------------------------------------------------------------
 // HTTP helpers — real JWTs through PostgREST
 // ---------------------------------------------------------------------------
+/**
+ * Access-token cache, shared across suite processes.
+ *
+ * Every suite runs in its own process and signs in five identities, so a full
+ * regression run made ~35 password grants — enough to hit Supabase's auth rate
+ * limit. The symptom was nasty: suites after the first two died before their
+ * first assertion and reported "0 PASS / 0 FAIL", which reads like a pass at a
+ * glance. Caching turns a whole run into a handful of real sign-ins.
+ *
+ * Kept in the OS temp directory, never in the repo, so DEV tokens cannot be
+ * committed. Tokens are re-validated against their own `exp` claim.
+ */
+const TOKEN_CACHE = resolve(tmpdir(), 'mr-clean-ops-dev-tokens.json');
+const memoryTokens = new Map();
+
+function readTokenCache() {
+  try { return JSON.parse(readFileSync(TOKEN_CACHE, 'utf8')); } catch { return {}; }
+}
+function writeTokenCache(cache) {
+  try { writeFileSync(TOKEN_CACHE, JSON.stringify(cache), { mode: 0o600 }); } catch { /* best effort */ }
+}
+/** Seconds until this JWT expires, or 0 if it cannot be read. */
+function secondsLeft(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+    return typeof payload.exp === 'number' ? payload.exp - Math.floor(Date.now() / 1000) : 0;
+  } catch { return 0; }
+}
+
 export async function signIn(email) {
+  const cached = memoryTokens.get(email) ?? readTokenCache()[email];
+  // 120s margin so a token cannot expire mid-suite.
+  if (cached && secondsLeft(cached) > 120) {
+    memoryTokens.set(email, cached);
+    return cached;
+  }
+
   const r = await fetch(`${CONFIG.url()}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: CONFIG.anon(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: CONFIG.testPassword() }),
   });
   const b = await r.json();
-  if (!r.ok || !b.access_token) throw new Error(`sign-in failed for ${email}: ${JSON.stringify(b)}`);
+  if (!r.ok || !b.access_token) {
+    const hint = r.status === 429 || /rate/i.test(JSON.stringify(b))
+      ? ' (auth rate limit — wait a few minutes, or reuse the cached tokens)' : '';
+    throw new Error(`sign-in failed for ${email}: ${JSON.stringify(b)}${hint}`);
+  }
+
+  memoryTokens.set(email, b.access_token);
+  writeTokenCache({ ...readTokenCache(), [email]: b.access_token });
   return b.access_token;
 }
 
@@ -332,6 +376,17 @@ export async function runSuite(suiteName, body) {
   try {
     const T = await signInAll(ids);
     await body({ db, ids, fx, rec, T });
+  } catch (error) {
+    // Record the crash as a failed check. Without this a suite that died before
+    // its first assertion printed "0 PASS / 0 FAIL", which reads like a pass at
+    // a glance — exactly how an auth rate-limit outage nearly went unnoticed.
+    rec.check({
+      id: 'SUITE CRASHED before completing', actor: 'harness', setup: '-',
+      action: 'run the suite body',
+      expected: 'the suite runs to completion',
+      actual: String(error?.message ?? error).split('\n')[0],
+      ok: false,
+    });
   } finally {
     summary = rec.summary();
     const removed = await fx.cleanup();
