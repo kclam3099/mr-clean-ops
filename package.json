@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:unit": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/unit/**/*.test.mjs\"",
     "test:e2e:privacy": "node tests/e2e/cross-user-privacy.test.mjs",
+    "test:availability": "node supabase/tests/availability-finder-regression.mjs",
     "test:regression": "node supabase/tests/run-all.mjs",
     "test:security": "node supabase/tests/security-regression.mjs",
     "test:engine": "node supabase/tests/appointment-engine-regression.mjs",

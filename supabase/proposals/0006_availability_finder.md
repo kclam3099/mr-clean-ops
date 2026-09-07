@@ -1,6 +1,13 @@
 # Proposal — `0006_availability_finder.sql`
 
-**Status: design only. Not written, not applied.** Revised per V1 review.
+**Status: IMPLEMENTED.** Superseded by
+[`supabase/migrations/0006_availability_finder.sql`](../migrations/0006_availability_finder.sql)
+and locked in by `supabase/tests/availability-finder-regression.mjs`.
+
+Kept as the design record. Two things changed between this document and the
+shipped migration, both from the V1 design locks: `p_slot_times` was removed
+entirely (configured `suggested_time_slots` only), and the return shape is
+available rows only with no `is_available` column.
 
 Answers *"show me available times this week / next week"*.
 
