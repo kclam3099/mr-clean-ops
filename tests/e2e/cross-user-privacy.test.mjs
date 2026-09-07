@@ -43,9 +43,11 @@ try {
   // Temporary synthetic fixture: KC must have something private to leak.
   // ---------------------------------------------------------------------------
   const kcToken = await signIn(ids.email.kc);
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kuala_Lumpur", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
+  // Tomorrow, not today: migration 0007 rejects appointments that do not start
+  // strictly in the future, so a "today 10:00" fixture fails whenever this suite
+  // runs after 10am. The date only has to be somewhere KC can load it.
+  const today = (await fx.query(
+    `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + 1), 'YYYY-MM-DD') d`))[0].d;
 
   const PRIVATE_CUSTOMER = "E2E PRIVATE CUSTOMER OMEGA";
   const SHARED_CUSTOMER = "E2E SHARED CUSTOMER ALPHA";
@@ -110,7 +112,7 @@ try {
   // tags in the document. Those tags are what a later soft navigation fails to
   // remove — reaching /calendar only by soft nav leaves __next_f empty and the
   // leak cannot occur, so a test that skipped this would pass vacuously.
-  await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
+  await page.goto(`${BASE}/calendar?week=${today}`, { waitUntil: "load" });
   await page.waitForSelector("article", { timeout: 20_000 });
 
   const kcDoc = await snapshot(page);
@@ -143,7 +145,10 @@ try {
   await page.waitForURL(`${BASE}/login`, { timeout: 20_000 });
   await loginInPlace(page, ids.email.nick);
   await page.waitForURL(`${BASE}/calendar`, { timeout: 20_000 });
-  await page.waitForSelector("article", { timeout: 20_000 });
+  // Wait for Nick's own shell, not for an appointment: his default week may
+  // legitimately be empty, and requiring a row here would make the suite
+  // depend on where the fixture date happens to fall.
+  await page.waitForSelector("header nav a", { timeout: 20_000 });
 
   // ---------------------------------------------------------------------------
   // 6-7. Nothing of KC's may survive — visible DOM, full HTML, or flight payload.
@@ -157,13 +162,19 @@ try {
 
   assertNoKcTrace("E2E-04", "after sign-out and sign-in as Nick", nickDoc);
 
+  // Proves Nick's page genuinely rendered — otherwise "no KC data found" could
+  // just mean "nothing rendered at all", which would pass vacuously.
+  const nickRendered = nickDoc.visibleText.includes("Calendar")
+    && nickDoc.visibleText.includes("Shared Team")
+    && nickDoc.dayHeadings >= 7;
   rec.check({
-    id: "E2E-05 Nick sees the shared fixture", actor: "TEST_NICK",
-    setup: "Shared Team appointment exists today",
-    action: "check the Shared Team customer is rendered",
-    expected: "present — proves Nick's own page really did render",
-    actual: nickDoc.visibleText.includes(SHARED_CUSTOMER) ? "present" : "MISSING",
-    ok: nickDoc.visibleText.includes(SHARED_CUSTOMER),
+    id: "E2E-05 Nick's own page really rendered", actor: "TEST_NICK",
+    setup: "his default week may contain no appointments",
+    action: "check the calendar shell, workspace label and 7 day columns",
+    expected: "all present — so a clean scan means clean, not blank",
+    actual: `calendar=${nickDoc.visibleText.includes("Calendar")} ` +
+            `label=${nickDoc.visibleText.includes("Shared Team")} dayColumns=${nickDoc.dayHeadings}`,
+    ok: nickRendered,
   });
   rec.check({
     id: "E2E-06 Nick has no workspace switcher", actor: "TEST_NICK",
@@ -276,6 +287,7 @@ async function snapshot(page) {
       visibleText: document.body?.innerText ?? "",
       flight: `${flightChunks}\n${scripts}`,
       selects: document.querySelectorAll("select").length,
+      dayHeadings: document.querySelectorAll("section h2").length,
       account: document.querySelector("header .ml-auto span")?.textContent?.trim() ?? null,
     };
   });

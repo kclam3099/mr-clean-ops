@@ -14,7 +14,8 @@ const SUITES = [
   ['security-regression', 'Security / identity isolation'],
   ['appointment-engine-regression', 'Appointment engine scheduling rules'],
   ['cross-workspace-privacy-regression', 'Cross-workspace privacy'],
-  ['availability-finder-regression', 'Availability finder (0006)'],
+  ['availability-finder-regression', 'Availability finder (0006 + 0007)'],
+  ['past-guard-and-config-regression', 'Past-datetime guard + booking config (0007)'],
 ];
 
 const results = [];

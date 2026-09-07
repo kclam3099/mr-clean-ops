@@ -228,30 +228,47 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
   });
   await fx.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [dyron, dow]);
 
-  // Duration must be derived server-side from the amount. RM1400 at RM200/h is
-  // 420 minutes: only 10:00 still finishes inside the 09:00-19:00 day, while
-  // 13:00 (ends 20:00) and 15:00 (ends 22:00) cannot. A weaker amount such as
-  // RM800 fits every slot and would prove nothing.
+  // 0007: the finder is a STANDARD-JOB surface. There is no amount input, so a
+  // caller cannot vary the probe window and sweep for a hidden boundary.
+  //
+  // The measured attack, before 0007: against a hidden 12:00 job, the 10:00
+  // candidate flipped from AVAILABLE at RM300 (90 min, ends 12:00) to OMITTED at
+  // RM301 (91 min, ends 12:01) — nine calls pinned the hidden start to the
+  // minute. See supabase/migrations/0007 for the full measurement.
   const dDur = await day(10);
-  const generic = await find(T.nick, { p_staff_ids: [jack], p_from: dDur, p_to: dDur });
-  const large = await find(T.nick, {
-    p_staff_ids: [jack], p_from: dDur, p_to: dDur, p_total_amount: 1400 });
+  const standard = await find(T.nick, { p_staff_ids: [jack], p_from: dDur, p_to: dDur });
   rec.check({
-    id: "AV-14 duration derived server-side from amount", actor: "NICK", setup: "empty day",
-    action: "compare a generic enquiry (60 min) with a RM1400 one (420 min)",
-    expected: "generic offers all three slots; RM1400 offers only 10:00",
-    actual: `generic=[${slots(generic).join(", ")}] rm1400=[${slots(large).join(", ")}]`,
-    ok: generic.ok && large.ok
-        && slots(generic).join(",") === "10:00,13:00,15:00"
-        && slots(large).join(",") === "10:00",
+    id: "AV-14 duration is fixed server-side configuration", actor: "NICK", setup: "empty day",
+    action: "find_available_slots with no amount input",
+    expected: "all three configured slots, sized by the default availability duration",
+    actual: slots(standard).join(", ") || "(none)",
+    ok: standard.ok && slots(standard).join(",") === "10:00,13:00,15:00",
   });
 
-  const negative = await find(T.nick, {
-    p_staff_ids: [jack], p_from: dDur, p_to: dDur, p_total_amount: -1 });
+  const withAmount = await find(T.nick, {
+    p_staff_ids: [jack], p_from: dDur, p_to: dDur, p_total_amount: 350 });
   rec.check({
-    id: "AV-15 negative amount rejected", actor: "NICK", setup: "-",
-    action: "p_total_amount = -1", expected: "REJECT",
-    actual: negative.ok ? "ACCEPTED" : negative.msg, ok: !negative.ok,
+    id: "AV-15 amount input is not accepted (CRITICAL)", actor: "NICK",
+    setup: "the 0006 signature took p_total_amount; 0007 removed it",
+    action: "call find_available_slots with p_total_amount",
+    expected: "REJECT — no such function; the probe window cannot be varied",
+    actual: withAmount.ok ? `ACCEPTED, ${withAmount.body.length} rows` : `HTTP ${withAmount.status}: ${withAmount.msg.slice(0, 70)}`,
+    ok: !withAmount.ok, security: true,
+  });
+
+  // The sweep that used to work must now be impossible: every amount is refused,
+  // so no transition can be observed at all.
+  const sweep = [];
+  for (const amount of [200, 300, 301, 350, 400]) {
+    const r = await find(T.nick, { p_staff_ids: [jack], p_from: dDur, p_to: dDur, p_total_amount: amount });
+    sweep.push(`${amount}:${r.ok ? "ACCEPTED" : "refused"}`);
+  }
+  rec.check({
+    id: "AV-15b amount sweep is impossible (CRITICAL)", actor: "NICK",
+    setup: "the exact amounts that located the hidden boundary before 0007",
+    action: "sweep RM200 -> RM400 across the transition point",
+    expected: "every call refused — no observable transition",
+    actual: sweep.join("  "), ok: sweep.every((s) => s.endsWith("refused")), security: true,
   });
 
   // ==========================================================================
