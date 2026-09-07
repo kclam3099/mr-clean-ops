@@ -1,148 +1,237 @@
 # Proposal — `0006_availability_finder.sql`
 
-**Status: design only. Not written, not applied.** This document is for review.
+**Status: design only. Not written, not applied.** Revised per V1 review.
 
-Answers the business question *"give me available times this week / next week"*
-without ever disclosing why a time is unavailable.
+Answers *"show me available times this week / next week"*.
 
----
-
-## Why this cannot be done in the browser
-
-The client can only see rows RLS grants it. A staff member shared across
-workspaces may be blocked by an appointment the caller cannot see, so a
-client-side slot calculation would offer times the server then rejects with
-`STAFF_UNAVAILABLE` — a broken experience, and a slow disclosure channel: a
-Shared-Team Master could map a private calendar by watching which "available"
-slots fail.
-
-Only a `SECURITY DEFINER` function can evaluate hidden conflicts and return a
-verdict without the reason.
-
-## Why not expose `assert_appointment_slot_available`
-
-It stays internal (no `EXECUTE` for `anon`/`authenticated`, verified by the
-security suite). It is the wrong shape for a public API — it raises *descriptive*
-errors, it answers one slot at a time, and it has no authorization of its own
-because `create_appointment` authorizes before calling it. Exposing it would
-hand callers the exact error strings 0004 was written to suppress.
-
-The new RPC is purpose-built and privacy-safe.
+This is a **suggestion surface, not a booking authority.** `create_appointment`
+remains the only thing that decides whether a booking is legal. The finder can
+be optimistic or stale; the engine cannot.
 
 ---
 
-## Signature
+## Why it must live in the database
+
+A staff member shared across workspaces may be blocked by an appointment the
+caller cannot see. A client-side calculation would therefore offer times the
+engine then rejects — a broken experience, and a disclosure channel: watching
+which "available" slots fail would map a private calendar.
+
+`assert_appointment_slot_available` stays internal (no `EXECUTE` for `anon` or
+`authenticated`, asserted by the security suite). It raises *descriptive* errors
+and has no authorization of its own, because `create_appointment` authorizes
+before calling it. Exposing it would hand callers the exact strings 0004 exists
+to suppress. This is a separate, purpose-built, privacy-safe RPC.
+
+---
+
+## A. Signature
 
 ```sql
 create function public.find_available_slots(
-  p_staff_ids        uuid[],
-  p_from             date,
-  p_to               date,
-  p_slot_times       time[]  default null,   -- default: suggested_time_slots
-  p_total_amount     numeric default null,   -- supply for a real quote
-  p_duration_min     integer default null    -- default: business_settings
+  p_staff_ids     uuid[],                   -- who to check
+  p_from          date,
+  p_to            date,                     -- inclusive; max 14 days (see G)
+  p_workspace_id  uuid    default null,     -- operational scope, NOT a busy-time filter
+  p_total_amount  numeric default null,     -- optional; duration derived server-side
+  p_slot_times    time[]  default null      -- optional; defaults to suggested_time_slots
 ) returns table (
-  staff_id     uuid,
-  slot_date    date,
-  slot_time    time,
-  is_available boolean          -- the ONLY output. No reason, ever.
+  staff_id  uuid,
+  slot_date date,
+  slot_time time
 )
-language plpgsql stable security definer set search_path to ''
+language plpgsql
+stable
+security definer
+set search_path to ''
 ```
-
-`grant execute ... to authenticated;` — unlike the internal helpers, this one is
-designed to be called.
-
-## Defaults
-
-| Input | Default | Source |
-| --- | --- | --- |
-| slot times | `10:00, 13:00, 15:00` | `suggested_time_slots`, workspace row first then the global row |
-| duration | 60 min | `business_settings.default_availability_job_duration_minutes` |
-| buffer | 30 min | `business_settings.default_buffer_minutes` |
-| amount | `0` | generic enquiry: treated as a normal job |
-
-Amount defaulting to `0` matters. It keeps `is_large_job` false for the
-*hypothetical* job, so a generic enquiry is not treated as a large job that
-would block everything after it. Existing large jobs still block forward as
-normal. When the caller supplies a real `p_total_amount`, the reverse large-job
-case is evaluated too.
-
-## Core loop — one source of truth for the rules
 
 ```sql
-for each staff, date in [p_from, p_to], slot in slot_times loop
-  begin
-    perform public.assert_appointment_slot_available(
-      v_staff, v_date, v_slot, v_duration, v_buffer, v_amount, null, false);
-    is_available := true;
-  exception when others then
-    is_available := false;      -- message deliberately discarded
-  end;
-  return next;
-end loop;
+revoke execute on function public.find_available_slots(uuid[],date,date,uuid,numeric,time[]) from public;
+grant  execute on function public.find_available_slots(uuid[],date,date,uuid,numeric,time[]) to authenticated;
 ```
 
-Reusing the engine is the whole point: working hours (company default and
-staff-specific), full-day and partial time off, physical overlap including
-buffer, the RM600 forward lock and the reverse case are all honoured because
-they are the same code path `create_appointment` uses. A rule added later is
-picked up here for free, and availability can never drift from what booking
-actually accepts.
+**Available slots only.** No row means not available. There is no `is_available`
+column, no reason column, and no unavailable rows — a caller cannot tell a
+hidden conflict from time off from outside-hours, because the shapes are
+identical: absence.
 
-Discarding the exception message is what makes it privacy-safe. Every failure —
-hidden cross-workspace appointment, time off, outside hours — collapses to
-`is_available = false`.
+## B. Authorization flow
 
-## Authorization
+Evaluated once, before any slot work:
 
-Checked once, up front, against `my_role()`:
+```
+v_role := public.my_role();
+if v_role is null then raise exception 'Not authorized'; end if;
+
+if v_role = 'staff' then
+    v_allowed := array[public.my_staff_id()]        -- own availability only
+elsif v_role in ('super_master','partner_master') then
+    v_allowed := (staff with an ACTIVE membership in a workspace the caller
+                  administers, i.e. sw.workspace_id in (select * from my_workspace_ids());
+                  further narrowed to p_workspace_id when supplied and visible)
+else
+    raise exception 'Not authorized';
+end if;
+
+v_targets := p_staff_ids ∩ v_allowed;      -- silent intersection
+```
 
 | Caller | May query |
 | --- | --- |
-| Super Master | staff with an active membership in any workspace they administer |
-| Partner Master | staff in their own workspace(s) only — Jack and Dyron in Shared Team |
+| KC (super_master) | Jack, Dyron, Victor — narrowed by the selected KC-visible scope |
+| Nick (partner_master) | Jack, Dyron only |
 | Staff | themselves only |
 | No profile / anon | nothing — raises |
 
-**Unauthorized staff ids are silently omitted from the result, not rejected.**
-Raising "not authorized for staff X" would confirm X exists, which is the
-enumeration channel the standing rule about UUID secrecy warns against. The
-trade-off — a mistyped id returns nothing rather than an error — is worth it.
+**Unauthorized ids are dropped silently, never rejected.** Raising "not
+authorized for staff X" would confirm X exists. Nick passing Victor's id gets
+the same response as Nick passing a random UUID: no rows for it. A caller cannot
+distinguish *exists but not yours*, *does not exist*, and *no availability*.
 
-The Jack case is the one that matters: Nick *is* authorized to query Jack, and
-slots Jack cannot take because of a KC Private Team job simply come back
-`is_available = false`. Nick learns the slot is not free. Nothing more.
+An empty `v_targets` returns zero rows rather than raising, for the same reason.
 
-## Open questions for review
+## C. Candidate-slot generation
 
-1. **Return shape.** Proposed: every evaluated slot with a boolean, so the UI can
-   grey out unavailable times. Equally safe alternative: return only available
-   slots. The boolean is better UX and discloses no more, since no reason is
-   attached either way — but say if you would rather omit them entirely.
-2. **Cost.** One subtransaction per slot: 7 days × 3 slots × 3 staff = 63. Fine
-   at this scale. If the range ever widens to a month across many staff, this
-   wants a pre-filter that skips days with no working hours before entering the
-   loop.
-3. **Staff attribution.** The RPC does not take a workspace — availability is a
-   physical property of a person, not of a workspace. Workspace only matters at
-   booking time. Worth confirming that matches your intent.
+Candidates are the cross product of `v_targets` × dates in `[p_from, p_to]` ×
+slot times. Slot times resolve in order:
+
+1. `p_slot_times` if supplied — **validated against the configured set**, not
+   accepted freely (see I).
+2. `suggested_time_slots` for `p_workspace_id`, if a workspace row exists.
+3. The global `suggested_time_slots` rows: **10:00, 13:00, 15:00**.
+
+This is deliberately *not* a minute-by-minute prober. Add Appointment may still
+submit any arbitrary time — the engine validates it on save. The finder answers
+"which of our standard visit times are open", which is the actual business
+question and is a far smaller surface to probe.
+
+## D. Duration and buffer
+
+Never trusted from the browser.
+
+| Case | Duration |
+| --- | --- |
+| `p_total_amount` is null | `business_settings.default_availability_job_duration_minutes` (60) |
+| `p_total_amount` supplied | derived server-side by the same rule `create_appointment` uses: `greatest(1, ceil(amount / rm_per_hour_rate * 60))` |
+
+Buffer is always `business_settings.default_buffer_minutes` (30). There is no
+duration parameter at all, so there is nothing to spoof.
+
+`p_total_amount` defaults to `0` for the hypothetical job when not supplied. That
+keeps `is_large_job` false for the *candidate*, so a generic enquiry is not
+treated as a large job that would blanket the rest of the day. Existing large
+jobs still block forward normally. When a real amount is supplied, the reverse
+large-job case is evaluated too — so a RM800 enquiry correctly shows fewer slots
+than a RM200 one.
+
+## E. Hidden-conflict behaviour
+
+Availability is computed **globally for the person**. `p_workspace_id` scopes
+*which staff the caller may ask about* — it never filters busy time.
+
+A slot blocked by an appointment in a workspace the caller cannot see is simply
+**omitted**. No row, no reason, no distinguishing mark. This is the same rule as
+0004's `STAFF_UNAVAILABLE`, expressed as absence instead of a message.
+
+## F. Return schema
+
+```
+staff_id   uuid
+slot_date  date
+slot_time  time
+```
+
+Never returned: blocking appointment id, conflict type, customer, amount,
+workspace of a hidden conflict, hidden start/end time, large-job classification,
+override reason, or any count of what was excluded.
+
+Note that even a *count* of unavailable slots would be a channel, which is why
+the function returns available rows only rather than a filtered-with-totals shape.
+
+## G. Range and cost limits
+
+```
+if p_to < p_from then raise exception 'Invalid range'; end if;
+if p_to - p_from > 13 then raise exception 'Range too large'; end if;   -- 14 days inclusive
+```
+
+A hard 14-day horizon. It covers "this week / next week" exactly and stops the
+function being used as a bulk schedule-probing endpoint.
+
+Worst case at V1 scale:
+
+| Staff | Days | Slots/day | Checks |
+| --- | --- | --- | --- |
+| 2 | 14 | 3 | **84** |
+| 3 | 14 | 3 | 126 |
+
+Fine for V1. No route optimisation, no travel-time modelling, no map distance —
+explicitly out of scope.
+
+## H. Exception handling
+
+**Not `when others`.** That would convert a genuine database fault — a missing
+table, a permissions error, a broken migration — into a confident "no
+availability", which is the worst possible failure mode for a scheduling tool.
+
+The validator raises business-rule violations with `SQLSTATE P0001`
+(`raise exception` without an explicit errcode, i.e. `raise_exception`). Only
+that class is caught:
+
+```sql
+begin
+  perform public.assert_appointment_slot_available(
+    v_staff, v_date, v_slot, v_duration, v_buffer, v_amount, null, false);
+  return next;                       -- available
+exception
+  when raise_exception then          -- P0001: a business rule said no
+    null;                            -- omit the candidate, keep going
+end;
+```
+
+Everything else — `undefined_table`, `insufficient_privilege`, `internal_error`
+— propagates as a real error and the whole call fails loudly.
+
+Reusing the validator is the point: working hours (company and staff-specific),
+full-day and partial time off, physical overlap including buffer, the RM600
+forward lock and the reverse case are all honoured because it is the same code
+path booking uses. A rule added later is picked up for free.
+
+**One caveat to accept explicitly:** this couples the finder to the validator's
+exception *class*. If a future change starts raising business-rule violations
+with a different SQLSTATE, they would propagate as errors instead of being
+treated as "unavailable" — loud, not silent, which is the right direction to
+fail. A test asserting each known rejection reason yields "omitted, no error"
+guards this.
+
+## I. Privacy side-channel analysis
+
+| Channel | Mitigation |
+| --- | --- |
+| Reason disclosure | Only available rows are returned. Absence is uniform. |
+| Existence of a hidden staff member | Unauthorized ids dropped silently; identical response to a random UUID. |
+| Existence of a hidden workspace | `p_workspace_id` is validated against the caller's visible set; an unknown value narrows to nothing rather than erroring. |
+| Timing | The validator runs for authorized targets only. Unauthorized ids are removed *before* the loop, so a caller cannot time-probe for existence. |
+| Counting | No totals, no "n slots excluded". |
+| Amount-band inference | A caller can vary `p_total_amount` and watch the result set shrink. This reveals something about **their own** hypothetical job's fit, not about the hidden job — the forward lock blocks the rest of the day regardless of the candidate's size, so the boundary observed is the caller's own duration, not the blocker's value. Worth re-checking during implementation. |
+| Slot-time probing | `p_slot_times` is validated against the configured set rather than accepted freely — otherwise a caller could binary-search a hidden appointment's exact boundaries at minute resolution. **This is the one place the design deliberately refuses caller input**, and it is the reason the parameter is a filter over configured slots, not free times. |
+| Error-message leakage | The finder raises only `Not authorized`, `Invalid range` and `Range too large`. It never surfaces the validator's text. |
 
 ## Tests to add before it ships
 
-Extending the existing suites:
-
-- Nick querying Jack, blocked by a hidden KC Private Team job → `is_available = false`,
-  and the result carries no time, amount, workspace or reason.
-- KC querying the same slot → also `false`, but KC can see the real reason
-  through the normal booking path.
-- Nick querying Victor's staff id → Victor silently omitted, no error confirming him.
-- Staff querying another staff member's id → silently omitted.
-- A slot reported available is then actually bookable — availability and booking
-  must not disagree.
-- A slot reported unavailable is then rejected by `create_appointment`.
-- `anon` and a no-profile authenticated caller → denied.
-- `assert_appointment_slot_available` remains non-executable by `authenticated`.
-
-The last two round-trip tests are the important ones: they are what prove the
-finder and the engine cannot drift apart.
+- Nick querying Jack, blocked by a hidden KC Private Team job → that slot absent;
+  response identical in shape to a slot free for other reasons.
+- KC querying the same → also absent, but KC still gets the real reason through
+  the normal booking path.
+- Nick querying Victor's id → dropped silently, no error, no rows.
+- Nick querying a random UUID → **byte-identical response** to the Victor case.
+- Staff querying another staff member's id → dropped silently.
+- Round-trip both ways: a returned slot is actually bookable; a slot the engine
+  rejects is never returned. These two are what prove finder and engine cannot
+  drift apart.
+- `p_slot_times` with an unconfigured time → rejected or ignored, never probed.
+- Range of 15 days → raises.
+- A forced database fault mid-loop → propagates, does **not** return "no availability".
+- `anon` and no-profile authenticated → denied.
+- `assert_appointment_slot_available` still not executable by `authenticated`.
