@@ -105,5 +105,5 @@ async function resolveSession(): Promise<
 
 /** Where this role belongs after signing in. */
 export function homePathFor(role: UserRole): string {
-  return role === "staff" ? "/my/today" : "/calendar";
+  return role === "staff" ? "/my/today" : "/dashboard";
 }

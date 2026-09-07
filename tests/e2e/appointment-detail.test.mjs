@@ -77,7 +77,8 @@ try {
       ["Private", victorAppt, "TEST PRIVATE CUSTOMER F3 VICTOR"],
     ]) {
       await page.goto(`${BASE}/appointments/${id}`, { waitUntil: "load" });
-      await page.waitForTimeout(1200);
+      await settled(page);
+      await page.waitForTimeout(600);
       const text = await page.evaluate(() => document.body.innerText);
       rec.check({
         id: `KC-01 opens ${label} appointment`, actor: "KC", setup: "administers both workspaces",
@@ -125,7 +126,8 @@ try {
     const snapshots = {};
     for (const [label, id] of [["victor", victorAppt], ["random", RANDOM_UUID], ["malformed", "not-a-uuid"]]) {
       await page.goto(`${BASE}/appointments/${id}`, { waitUntil: "load" });
-      await page.waitForTimeout(900);
+      await settled(page);
+      await page.waitForTimeout(600);
       snapshots[label] = await page.evaluate(() => ({
         text: document.body.innerText.trim(),
         html: document.documentElement.outerHTML,
@@ -200,7 +202,8 @@ try {
     const { page, ctx } = await session(email);
 
     await page.goto(`${BASE}/my/appointments/${ownId}`, { waitUntil: "load" });
-    await page.waitForTimeout(1000);
+    await settled(page);
+    await page.waitForTimeout(600);
     const own = await page.evaluate(() => document.body.innerText);
     rec.check({
       id: `STAFF-01 ${who} opens own appointment`, actor: who, setup: "-",
@@ -578,6 +581,12 @@ async function assertAppIsUp() {
     console.error(`\nCannot reach the app at ${BASE} (${e.message}). Start it first.\n`);
     process.exit(2);
   }
+}
+
+/** Waits for a streamed route to finish rendering, not just to respond. */
+async function settled(page) {
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 })
+    .catch(() => {});
 }
 
 async function session(email) {

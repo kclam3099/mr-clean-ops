@@ -105,7 +105,8 @@ try {
   // 1-3. KC signs in, and the KC-only data legitimately IS present.
   // ---------------------------------------------------------------------------
   await login(page, ids.email.kc);
-  await page.waitForURL(`${BASE}/calendar`, { timeout: 20_000 });
+  // Masters land on /dashboard; the leak test then hard-loads /calendar itself.
+  await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
 
   // Load /calendar as a FULL page load, not just the post-login soft navigation.
   // This is what puts KC's payload into inline `self.__next_f.push(...)` script
@@ -144,11 +145,13 @@ try {
   await page.getByRole("button", { name: /sign out/i }).click();
   await page.waitForURL(`${BASE}/login`, { timeout: 20_000 });
   await loginInPlace(page, ids.email.nick);
-  await page.waitForURL(`${BASE}/calendar`, { timeout: 20_000 });
-  // Wait for Nick's own shell, not for an appointment: his default week may
-  // legitimately be empty, and requiring a row here would make the suite
-  // depend on where the fixture date happens to fall.
+  await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+  // Wait for the shell AND for streaming to finish. With loading.tsx in place
+  // the skeleton renders first, and snapshotting then would scan ~100 characters
+  // of placeholder and "pass" without ever seeing the real page.
   await page.waitForSelector("header nav a", { timeout: 20_000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 });
+  await page.waitForTimeout(500);
 
   // ---------------------------------------------------------------------------
   // 6-7. Nothing of KC's may survive — visible DOM, full HTML, or flight payload.
@@ -164,16 +167,19 @@ try {
 
   // Proves Nick's page genuinely rendered — otherwise "no KC data found" could
   // just mean "nothing rendered at all", which would pass vacuously.
-  const nickRendered = nickDoc.visibleText.includes("Calendar")
+  // Role-agnostic: asserts Nick's shell rendered, without depending on which
+  // page is currently the Master home. A blank page would otherwise scan
+  // "clean" and pass for the wrong reason.
+  const nickRendered = nickDoc.account === "TEST_NICK"
     && nickDoc.visibleText.includes("Shared Team")
-    && nickDoc.dayHeadings >= 7;
+    && nickDoc.navLinks >= 3;
   rec.check({
     id: "E2E-05 Nick's own page really rendered", actor: "TEST_NICK",
-    setup: "his default week may contain no appointments",
-    action: "check the calendar shell, workspace label and 7 day columns",
+    setup: "whichever page is the Master home",
+    action: "check the account name, workspace label and navigation",
     expected: "all present — so a clean scan means clean, not blank",
-    actual: `calendar=${nickDoc.visibleText.includes("Calendar")} ` +
-            `label=${nickDoc.visibleText.includes("Shared Team")} dayColumns=${nickDoc.dayHeadings}`,
+    actual: `account=${nickDoc.account} label=${nickDoc.visibleText.includes("Shared Team")} ` +
+            `navLinks=${nickDoc.navLinks} at ${new URL(nickDoc.url).pathname}`,
     ok: nickRendered,
   });
   rec.check({
@@ -228,6 +234,72 @@ try {
       });
     }
   }
+
+  // =========================================================================
+  // 7. Dashboard aggregates must not include hidden rows
+  // =========================================================================
+  // A summary is a place a leak hides in plain sight: the private appointment
+  // never appears as a card, but a total computed over all rows would still
+  // disclose its value. KC and Nick must see DIFFERENT totals for the same day.
+  {
+    const kcCtx = await browser.newContext();
+    const kcPage = await kcCtx.newPage();
+    await kcPage.goto(`${BASE}/login`, { waitUntil: "load" });
+    await kcPage.fill("input[name=email]", ids.email.kc);
+    await kcPage.fill("input[name=password]", PASSWORD);
+    await kcPage.click("button[type=submit]");
+    await kcPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+    await kcPage.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await kcPage.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 });
+    const kcStats = await readStats(kcPage);
+    await kcCtx.close();
+
+    const nickCtx = await browser.newContext();
+    const nickPage = await nickCtx.newPage();
+    await nickPage.goto(`${BASE}/login`, { waitUntil: "load" });
+    await nickPage.fill("input[name=email]", ids.email.nick);
+    await nickPage.fill("input[name=password]", PASSWORD);
+    await nickPage.click("button[type=submit]");
+    await nickPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+    await nickPage.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await nickPage.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 });
+    const nickStats = await readStats(nickPage);
+    const nickPage_ = await nickPage.evaluate(() => ({
+      html: document.documentElement.outerHTML,
+      flight: (globalThis.self?.__next_f ?? []).map((c) => JSON.stringify(c)).join("\n"),
+      text: document.body.innerText,
+    }));
+    await nickCtx.close();
+
+    rec.check({
+      id: "DASH-01 KC's dashboard counts the private appointment", actor: "TEST_KC",
+      setup: "a private appointment exists today alongside a shared one",
+      action: "read the Today count and total",
+      expected: "includes both",
+      actual: kcStats, ok: kcStats.length > 0,
+    });
+    rec.check({
+      id: "DASH-02 Nick's totals exclude the hidden row (CRITICAL)", actor: "TEST_NICK",
+      setup: "same day, same dashboard",
+      action: "compare Nick's Today figures against KC's",
+      expected: "different — a shared aggregate would disclose the hidden job's value",
+      actual: `KC="${kcStats}" NICK="${nickStats}"`,
+      ok: kcStats !== nickStats, security: true,
+    });
+    for (const [surface, hay] of [
+      ["visible text", nickPage_.text], ["HTML", nickPage_.html], ["RSC payload", nickPage_.flight],
+    ]) {
+      const found = KC_ONLY.filter(([, t]) => hay.includes(t)).map(([l]) => l);
+      rec.check({
+        id: `DASH-03 dashboard ${surface} clean (CRITICAL)`, actor: "TEST_NICK", setup: "-",
+        action: `scan the dashboard ${surface}`,
+        expected: "0 traces",
+        actual: found.length ? `LEAKED: ${found.join(", ")}` : "clean",
+        ok: found.length === 0, security: true,
+      });
+    }
+  }
+
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
@@ -238,6 +310,15 @@ try {
 }
 
 // ---------------------------------------------------------------------------
+
+/** The Today stat card's number and total, as a comparable string. */
+async function readStats(page) {
+  return page.evaluate(() => {
+    const card = [...document.querySelectorAll("div")]
+      .find((d) => /^TODAY/i.test(d.innerText.trim()));
+    return card ? card.innerText.replace(/\s+/g, " ").trim() : "";
+  });
+}
 
 async function assertAppIsUp() {
   try {
@@ -288,6 +369,7 @@ async function snapshot(page) {
       flight: `${flightChunks}\n${scripts}`,
       selects: document.querySelectorAll("select").length,
       dayHeadings: document.querySelectorAll("section h2").length,
+      navLinks: document.querySelectorAll("header nav a").length,
       account: document.querySelector("header .ml-auto span")?.textContent?.trim() ?? null,
     };
   });

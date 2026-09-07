@@ -106,8 +106,31 @@ are refused by the RPC status guard as well.
 
 ---
 
-## Phase O3 — operational dashboard polish
+## Phase O3 — operational dashboard polish — DONE
 
-**Status:** started.
+`/dashboard` was a placeholder and was not even linked. It is now the Master
+home and the first nav item ("Today"): Today / Tomorrow / large-jobs-today
+counts with booked totals, today grouped **by staff member** (the question a
+Master actually asks in the morning), and tomorrow as a flat agenda.
+
+Agenda and calendar cards now link through to F3 detail. `loading.tsx`
+skeletons added for all eight data-backed routes.
+
+**A leak that a summary invites, checked rather than assumed.** The private
+appointment never appears as a card on Nick's dashboard — but a total computed
+over all rows would still disclose its value. Measured on DEV: for the same
+day KC sees `Tomorrow 3 · RM900.00` and Nick sees `Tomorrow 2 · RM600.00`. The
+aggregate is computed from RLS-filtered rows, so it is correct by construction;
+`DASH-02` now asserts the two figures differ, which would fail immediately if
+anyone introduced a shared aggregate.
+
+Also strengthened the privacy suite: with `loading.tsx` in place its snapshot
+was catching the skeleton (111 characters) rather than the rendered page, which
+would have made the scan vacuous. It now waits for streaming to finish — 464
+characters of real content.
+
+Browser screenshots could not be captured this session (the host window is
+hidden, the capture times out). Verification was done through DOM assertions
+instead, which is stronger evidence for these properties anyway.
 
 ---

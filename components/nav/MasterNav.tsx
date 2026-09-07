@@ -25,6 +25,7 @@ export function MasterNav({
   const current = scope.kind === "all" ? "all" : scope.workspaceId;
 
   const links = [
+    { path: "/dashboard", label: "Today", scoped: true },
     { path: "/calendar", label: "Calendar", scoped: true },
     { path: "/appointments", label: "Appointments", scoped: true },
     { path: "/staff", label: "Staff", scoped: true },
