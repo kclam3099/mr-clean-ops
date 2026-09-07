@@ -4,7 +4,6 @@ import { NextResponse, type NextRequest } from "next/server";
 // Route protection is a UX convenience only — Row Level Security is the
 // real authorization boundary (Blueprint v0.2 SS F). Every request under
 // a protected group still hits RLS regardless of what this file does.
-const STAFF_PREFIX = "/my";
 const PUBLIC_PATHS = new Set(["/login"]);
 
 export async function proxy(request: NextRequest) {
@@ -46,11 +45,12 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && pathname === "/login") {
-    // Role-aware redirect (staff -> /my/today, master -> /dashboard)
-    // lands once profiles/RLS are live (Phase 1 Build Plan step 4) — a
-    // real profiles row is required to know which home page is correct.
-    const homePath = pathname.startsWith(STAFF_PREFIX) ? "/my/today" : "/dashboard";
-    return NextResponse.redirect(new URL(homePath, request.url));
+    // Deliberately redirects to "/" rather than deciding the home page here.
+    // Knowing whether this user is staff or a Master needs a profiles lookup,
+    // and middleware runs on every request — app/page.tsx makes that decision
+    // once, where it is actually needed. The login page itself also re-checks,
+    // because a session can exist without a usable profile.
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return response;
