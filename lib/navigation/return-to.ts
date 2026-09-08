@@ -10,6 +10,7 @@
 export const RETURN_DESTINATIONS = {
   calendar: "/calendar",
   appointments: "/appointments",
+  availability: "/availability",
   today: "/my/today",
   tomorrow: "/my/tomorrow",
   month: "/my/month",

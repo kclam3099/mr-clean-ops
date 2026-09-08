@@ -177,19 +177,23 @@ function StatusBadge({
     cancelled: "bg-slate-100 text-slate-600",
   };
   if (compact) {
-    // A coloured dot carries the same information without eating the width the
-    // customer name needs.
-    const dot: Record<AgendaAppointment["status"], string> = {
-      booked: "bg-blue-500",
-      completed: "bg-green-500",
-      cancelled: "bg-slate-400",
+    // Colour PLUS a glyph. A coloured dot alone reads identically to anyone who
+    // cannot distinguish the hues, and this badge is the only status signal on
+    // the week grid — the shape has to carry the meaning on its own.
+    const marks: Record<AgendaAppointment["status"], { glyph: string; className: string }> = {
+      booked: { glyph: "●", className: "bg-blue-100 text-blue-800" },
+      completed: { glyph: "✓", className: "bg-green-100 text-green-800" },
+      cancelled: { glyph: "✕", className: "bg-slate-100 text-slate-600" },
     };
+    const mark = marks[status];
     return (
       <span
-        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dot[status]}`}
+        className={`shrink-0 rounded px-1 text-[10px] font-semibold leading-4 ${mark.className}`}
         title={status}
-        aria-label={status}
-      />
+      >
+        <span aria-hidden="true">{mark.glyph}</span>
+        <span className="sr-only">{status}</span>
+      </span>
     );
   }
   return (
