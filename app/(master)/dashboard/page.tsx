@@ -5,7 +5,8 @@ import { resolveScope, scopedHref, scopeOptions } from "@/lib/workspace/scope";
 import {
   getMasterAgenda, businessToday, addDays, type AgendaAppointment,
 } from "@/lib/agenda/queries";
-import { AgendaList, formatDateHeading } from "@/components/agenda/AgendaList";
+import { formatDateHeading } from "@/components/agenda/AgendaList";
+import { AppointmentGrid } from "@/components/agenda/AppointmentGrid";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { formatMoney } from "@/lib/pricing/duration";
 
@@ -86,11 +87,10 @@ export default async function DashboardPage({
             Open calendar
           </Link>
         </div>
-        <AgendaList
+        <AppointmentGrid
           appointments={tomorrows}
           detailHrefFor={(id) => `/appointments/${id}`}
           emptyMessage="Nothing scheduled tomorrow yet."
-          showDateHeadings={false}
           showStaff
           showWorkspace={scope.kind === "all"}
         />
@@ -151,7 +151,10 @@ function ByStaff({
           Nothing scheduled today.
         </p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        // Staff groups stack full width; the CARDS inside each group use the
+        // same grid Tomorrow uses. Grouping stays outside the card layout, so
+        // one Today card and one Tomorrow card are exactly the same size.
+        <div className="space-y-5">
           {groups.map(([staffName, list]) => (
             <div key={staffName} className="min-w-0 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
@@ -160,11 +163,10 @@ function ByStaff({
                   {list.length} · {formatMoney(sum(list))}
                 </span>
               </div>
-              <AgendaList
+              <AppointmentGrid
                 appointments={list}
                 detailHrefFor={(id) => `/appointments/${id}`}
                 emptyMessage="—"
-                showDateHeadings={false}
                 showWorkspace={scope.kind === "all"}
               />
             </div>

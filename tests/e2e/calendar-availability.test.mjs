@@ -247,105 +247,145 @@ try {
   }
 
   // =========================================================================
-  // 3. Availability tool
+  // 3. The customer availability message
   // =========================================================================
+  // The output goes straight to a customer, so what it must NOT contain
+  // matters more than what it does.
   {
     const { page, ctx } = await session(ids.email.kc);
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto(`${BASE}/availability`, { waitUntil: "load" });
+    await page.waitForSelector("[data-customer-message]", { timeout: 20_000 });
     await settle(page);
-    const chips = await page.evaluate(() =>
-      [...document.querySelectorAll("[data-staff-chip]")].map((b) => b.textContent.trim()));
+
+    const message = await page.evaluate(() =>
+      document.querySelector("[data-customer-message]").value);
+
     rec.check({
-      id: "AVL-01 KC can search all three staff", actor: "KC", setup: "All Operations",
-      action: "read the staff chips",
-      expected: "Jack, Dyron and Victor",
-      actual: chips.join(", ") || "(none)",
-      ok: ["TEST_JACK", "TEST_DYRON", "TEST_VICTOR"].every((n) => chips.includes(n)),
+      id: "AVL-01 the page produces a ready-to-send message", actor: "KC",
+      setup: "This week, generated on the server",
+      action: "read the message box",
+      expected: "a Chinese heading followed by weekday and time lines",
+      actual: message.replace(/\n/g, " | ").slice(0, 90),
+      ok: /^(这个星期可预约时间 😊|这个星期暂时没有可预约时间)/.test(message),
     });
 
-    await page.click("[data-range-preset]");
+    rec.check({
+      id: "AVL-02 the message names no staff member (CRITICAL)", actor: "KC",
+      setup: "the customer does not care who comes",
+      action: "scan the message for staff names",
+      expected: "none",
+      actual: ["TEST_JACK", "TEST_DYRON", "TEST_VICTOR", "Jack", "Dyron", "Victor"]
+        .filter((n) => message.includes(n)).join(", ") || "none",
+      ok: !["TEST_JACK", "TEST_DYRON", "TEST_VICTOR", "Jack", "Dyron", "Victor"]
+        .some((n) => message.includes(n)),
+      security: true,
+    });
+
+    rec.check({
+      id: "AVL-03 the message carries no workspace, count or reason (CRITICAL)", actor: "KC",
+      setup: "-", action: "scan for schedule information",
+      expected: "none",
+      actual: ["Shared Team", "KC Private Team", "busy", "unavailable", "booked", "conflict"]
+        .filter((t) => message.includes(t)).join(", ") || "none",
+      ok: !["Shared Team", "KC Private Team", "busy", "unavailable", "booked", "conflict"]
+        .some((t) => message.includes(t)),
+      security: true,
+    });
+
+    rec.check({
+      id: "AVL-04 there is no staff picker to operate", actor: "KC",
+      setup: "the owner chooses WHEN, not WHO",
+      action: "look for staff selection controls",
+      expected: "absent",
+      actual: `${await page.evaluate(() => document.querySelectorAll("[data-staff-chip]").length)} chip(s)`,
+      ok: (await page.evaluate(() => document.querySelectorAll("[data-staff-chip]").length)) === 0,
+    });
+
+    // 2.13 #11 — a slot that has already passed today must not be advertised.
+    const nowHHMM = (await fx.query(
+      `select to_char((now() at time zone 'Asia/Kuala_Lumpur'),'HH24:MI') t`))[0].t;
+    await page.click('[data-range-preset="today"]');
     await page.waitForTimeout(2500);
-    const results = await page.evaluate(() => ({
-      books: [...document.querySelectorAll("[data-book-slot]")].map((a) => a.getAttribute("href")),
-      caption: document.body.innerText.includes(
-        "Suggested for a standard job. Final availability is confirmed when saving."),
-      reasons: /unavailable|because|blocked|conflict/i.test(document.body.innerText),
-    }));
-    rec.check({
-      id: "AVL-02 results carry a Book link with date, time and staff", actor: "KC", setup: "-",
-      action: "read a Book this time link",
-      expected: "staff, date, time and return=availability",
-      actual: results.books[0] ?? "(no results)",
-      ok: !!results.books[0] && ["staff=", "date=", "time=", "return=availability"]
-        .every((p) => results.books[0].includes(p)),
+    const todayMessage = await page.evaluate(() =>
+      document.querySelector("[data-customer-message]").value);
+    const advertised = [...todayMessage.matchAll(/(\d{1,2})(?:\.(\d{2}))?(am|pm)/g)].map((m) => {
+      let h = Number(m[1]) % 12;
+      if (m[3] === "pm") h += 12;
+      return `${String(h).padStart(2, "0")}:${m[2] ?? "00"}`;
     });
     rec.check({
-      id: "AVL-03 the standard-job caption is shown", actor: "KC", setup: "-",
-      action: "look for the caption",
-      expected: "present — a suggestion is not a guarantee",
-      actual: results.caption ? "present" : "MISSING", ok: results.caption,
-    });
-    rec.check({
-      id: "AVL-04 no reasons are given for missing times (CRITICAL)", actor: "KC", setup: "-",
-      action: "scan the results for explanations",
-      expected: "available rows only, no 'why not'",
-      actual: results.reasons ? "REASON TEXT FOUND" : "none", ok: !results.reasons, security: true,
+      id: "AVL-05 a slot already past today is never advertised (CRITICAL)", actor: "KC",
+      setup: `it is ${nowHHMM} MYT`,
+      action: "read the Today message and compare each time against the clock",
+      expected: "every advertised time is still ahead",
+      actual: advertised.length ? `${advertised.join(", ")} vs now ${nowHHMM}` : "no times offered",
+      ok: advertised.every((t) => t > nowHHMM),
     });
 
-    // Range guard, checked before the RPC so the message is precise.
-    const horizon = await day(30);
-    await page.evaluate((d) => {
-      const inputs = [...document.querySelectorAll('input[type="date"]')];
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-      setter.call(inputs[1], d);
-      inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
-    }, horizon);
-    await page.waitForTimeout(300);
-    await page.click("text=Find times");
-    await page.waitForTimeout(2000);
-    const rangeMsg = await page.evaluate(() =>
-      document.querySelector('[role="alert"]')?.textContent?.trim() ?? null);
+    // Copy must reproduce EXACTLY what is on screen.
+    await page.click('[data-range-preset="thisWeek"]');
+    await page.waitForTimeout(2500);
+    const shown = await page.evaluate(() =>
+      document.querySelector("[data-customer-message]").value);
+    await page.click("[data-copy-message]");
+    await page.waitForTimeout(800);
+    const clip = await page.evaluate(async () => {
+      try { return await navigator.clipboard.readText(); } catch (e) { return `FAILED: ${e.message}`; }
+    });
+    // Windows hands back CRLF from the OS clipboard; the text is otherwise
+    // identical and pastes the same, so compare on normalised line endings.
+    const norm = (t) => t.replace(/\r\n/g, "\n");
     rec.check({
-      id: "AVL-05 an over-long range is refused with a precise message", actor: "KC",
-      setup: "a range wider than the 14-day horizon",
-      action: "search",
-      expected: "a specific message, never raw Postgres text",
-      actual: rangeMsg ?? "(no message)",
-      ok: !!rangeMsg && /14 days or fewer/i.test(rangeMsg) && !/postgres|pgrst|exception/i.test(rangeMsg),
+      id: "AVL-06 Copy reproduces the visible message exactly", actor: "KC", setup: "-",
+      action: "press Copy and read the clipboard back",
+      expected: "identical to the message on screen",
+      actual: norm(clip) === shown
+        ? `${shown.length} chars, identical`
+        : `clipboard ${clip.length} vs shown ${shown.length}`,
+      ok: norm(clip) === shown,
+    });
+
+    rec.check({
+      id: "AVL-07 copying gives concise feedback", actor: "KC", setup: "-",
+      action: "read the button and status after copying",
+      expected: "Copied",
+      actual: await page.evaluate(() =>
+        document.querySelector("[data-copy-message]").textContent.trim()),
+      ok: (await page.evaluate(() =>
+        document.querySelector("[data-copy-message]").textContent.trim())) === "Copied",
     });
     await ctx.close();
   }
 
+  // Nick gets the same customer-facing output, built from the same operational
+  // team, with no trace of anything he cannot see.
   {
     const { page, ctx } = await session(ids.email.nick);
     await page.goto(`${BASE}/availability`, { waitUntil: "load" });
+    await page.waitForSelector("[data-customer-message]", { timeout: 20_000 });
     await settle(page);
-    const chips = await page.evaluate(() =>
-      [...document.querySelectorAll("[data-staff-chip]")].map((b) => b.textContent.trim()));
-    await page.click("[data-range-preset]");
-    await page.waitForTimeout(2500);
+
     const surfaces = await page.evaluate(() => ({
-      names: [...document.querySelectorAll("li")].map((l) => l.textContent).join(" "),
+      message: document.querySelector("[data-customer-message]").value,
       html: document.documentElement.outerHTML,
       flight: (globalThis.self?.__next_f ?? []).map((c) => JSON.stringify(c)).join("\n"),
     }));
 
     rec.check({
-      id: "AVL-06 Nick can search only Jack and Dyron (CRITICAL)", actor: "NICK",
-      setup: "Shared Team only",
-      action: "read the staff chips",
-      expected: "exactly 2",
-      actual: `${chips.length}: ${chips.join(", ")}`,
-      ok: chips.length === 2 && chips.includes("TEST_JACK") && chips.includes("TEST_DYRON"),
-      security: true,
+      id: "AVL-08 Nick gets the same customer format", actor: "NICK", setup: "Shared Team only",
+      action: "read the message",
+      expected: "the same heading shape as KC's",
+      actual: surfaces.message.split("\n")[0],
+      ok: /^(这个星期可预约时间 😊|这个星期暂时没有可预约时间)/.test(surfaces.message),
     });
 
     for (const [label, hay] of [
-      ["results", surfaces.names], ["HTML", surfaces.html], ["RSC payload", surfaces.flight],
+      ["message", surfaces.message], ["HTML", surfaces.html], ["RSC payload", surfaces.flight],
     ]) {
       const found = KC_ONLY.filter(([, needle]) => hay.includes(needle)).map(([l]) => l);
       rec.check({
-        id: `AVL-07 availability ${label} clean (CRITICAL)`, actor: "NICK", setup: "-",
+        id: `AVL-09 availability ${label} clean (CRITICAL)`, actor: "NICK", setup: "-",
         action: `scan the ${label}`,
         expected: "0 traces of Victor or the private workspace",
         actual: found.length ? `LEAKED: ${found.join(", ")}` : "clean",
@@ -356,12 +396,13 @@ try {
   }
 
   // =========================================================================
-  // 4. A hidden appointment removes a slot, silently
+  // 4. A hidden appointment removes a time, silently
   // =========================================================================
   {
-    // Jack gets a temporary private membership and a hidden private job, so a
-    // slot disappears from NICK's suggestions with no explanation available.
-    const hiddenDate = await fx.freeDate(ids.staff.jack, { offsetDays: 6 });
+    // Give Jack a hidden private job, and check the customer message loses that
+    // time without ever explaining why. Dyron is booked at the same time first,
+    // so the union rule cannot keep the slot alive.
+    const hiddenDate = await fx.freeDate(ids.staff.jack, { offsetDays: 3 });
     const existing = await fx.query(
       `select id, is_active from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
       [ids.staff.jack, ids.ws.private]);
@@ -375,62 +416,64 @@ try {
         [ids.staff.jack, ids.ws.private]);
     }
 
-    const { page, ctx } = await session(ids.email.nick);
-    const readSlots = async () => {
+    const readTimes = async (page) => {
       await page.goto(`${BASE}/availability`, { waitUntil: "load" });
+      await page.waitForSelector("[data-customer-message]", { timeout: 20_000 });
       await settle(page);
-      await page.evaluate((d) => {
-        const inputs = [...document.querySelectorAll('input[type="date"]')];
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-        setter.call(inputs[0], d); inputs[0].dispatchEvent(new Event("input", { bubbles: true }));
-        setter.call(inputs[1], d); inputs[1].dispatchEvent(new Event("input", { bubbles: true }));
-      }, hiddenDate);
-      await page.waitForTimeout(300);
-      await page.click("text=Find times");
-      await page.waitForTimeout(2500);
-      return page.evaluate(() =>
-        [...document.querySelectorAll("li")]
-          .map((l) => l.textContent.replace(/\s+/g, " ").trim())
-          .filter((t) => /\d{2}:\d{2}/.test(t)));
+      return page.evaluate(() => document.querySelector("[data-customer-message]").value);
     };
 
-    const before = await readSlots();
+    const { page, ctx } = await session(ids.email.nick);
+    const before = await readTimes(page);
+
+    // Dyron in the open, Jack hidden — both at 10:00 on the same day.
+    const dyronJob = await rpc("create_appointment", kcToken, bookingArgs({
+      ws: ids.ws.shared, staff: ids.staff.dyron, date: hiddenDate, time: "10:00",
+      amount: 200, remarks: fx.TAG }));
+    if (dyronJob.ok) fx.track(dyronJob.body);
     const hidden = await rpc("create_appointment", kcToken, bookingArgs({
       ws: ids.ws.private, staff: ids.staff.jack, date: hiddenDate, time: "10:00", amount: 200,
       remarks: fx.TAG, customer: SYNTHETIC_PRIVATE_CUSTOMER }));
     if (hidden.ok) fx.track(hidden.body);
-    const after = await readSlots();
 
-    const jackTen = (list) => list.some((t) => t.includes("10:00") && t.includes("TEST_JACK"));
+    const after = await readTimes(page);
+    const weekday = (await fx.query(`select to_char($1::date,'ID') d`, [hiddenDate]))[0].d;
+    const zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][Number(weekday) - 1];
+    const dayTimes = (msg) => {
+      const lines = msg.split("\n");
+      const i = lines.indexOf(zh);
+      return i === -1 ? "" : (lines[i + 1] ?? "");
+    };
+
     rec.check({
-      id: "AVL-08 a hidden appointment removes the slot, with no explanation (CRITICAL)",
-      actor: "NICK",
-      setup: "Jack given a hidden private job at 10:00 that Nick cannot see",
-      action: "search the same day before and after",
-      expected: "the 10:00 Jack row disappears and nothing says why",
-      actual: `before jack@10:00=${jackTen(before)} after=${jackTen(after)} (${before.length} -> ${after.length} rows)`,
-      ok: hidden.ok && jackTen(before) && !jackTen(after),
+      id: "AVL-10 a hidden appointment removes the time (CRITICAL)", actor: "NICK",
+      setup: `Dyron booked openly and Jack booked privately, both 10:00 on ${hiddenDate}`,
+      action: "compare that weekday's times before and after",
+      expected: "10am disappears",
+      actual: `before "${dayTimes(before)}" after "${dayTimes(after)}"`,
+      ok: dyronJob.ok && hidden.ok
+          && dayTimes(before).includes("10am") && !dayTimes(after).includes("10am"),
       security: true,
     });
 
-    const text = await page.evaluate(() => document.body.innerText);
-    const found = KC_ONLY.filter(([, n]) => text.includes(n)).map(([l]) => l);
     rec.check({
-      id: "AVL-09 the removal discloses nothing (CRITICAL)", actor: "NICK", setup: "-",
-      action: "scan the page after the slot vanished",
-      expected: "no private customer, workspace or staff trace",
-      actual: found.length ? `LEAKED: ${found.join(", ")}` : "clean",
-      ok: found.length === 0, security: true,
+      id: "AVL-11 the removal explains nothing (CRITICAL)", actor: "NICK", setup: "-",
+      action: "scan the message and page after the time vanished",
+      expected: "no private customer, workspace, staff or reason",
+      actual: (() => {
+        const found = KC_ONLY.filter(([, n]) => after.includes(n)).map(([l]) => l);
+        return found.length ? `LEAKED: ${found.join(", ")}` : "clean";
+      })(),
+      ok: !KC_ONLY.some(([, n]) => after.includes(n))
+          && !/busy|unavailable|conflict|booked/i.test(after),
+      security: true,
     });
     await ctx.close();
 
-    // Undo the membership NOW rather than at suite teardown. Left in place it
-    // gives Jack two eligible workspaces for every later block, which turns the
-    // normal one-tap assignment into the "Which team?" exception — the paste
-    // checks below were failing for exactly that reason.
+    // Undo the membership immediately; leaving it would give Jack two eligible
+    // workspaces for every later block.
     if (existing.length > 0) {
-      await db.query(
-        `update public.staff_workspaces set is_active = $2 where id = $1`,
+      await db.query(`update public.staff_workspaces set is_active = $2 where id = $1`,
         [existing[0].id, existing[0].is_active]);
     } else {
       await db.query(
@@ -438,6 +481,7 @@ try {
         [ids.staff.jack, ids.ws.private]);
     }
   }
+
 
   // =========================================================================
   // 5. Responsive

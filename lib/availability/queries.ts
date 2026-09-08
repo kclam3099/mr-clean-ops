@@ -3,15 +3,12 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/serverClient";
 import { getSessionContext } from "@/lib/auth/session";
-import { resolveScope } from "@/lib/workspace/scope";
-import { getCalendarStaff } from "@/lib/agenda/staff";
+import { resolveBookingContext } from "@/lib/appointments/context";
 import { logAndMap, appError, AppErrorCode, type AppError } from "@/lib/errors/appError";
-// Checked here too, so the user gets a precise message rather than the generic
-// mapping of the RPC's own `Range too large`.
-import { MAX_RANGE_DAYS } from "@/lib/availability/constants";
+import { MAX_RANGE_DAYS, OPERATIONAL_WORKSPACE_SLUG } from "@/lib/availability/constants";
 
 /**
- * "Find a time" — the operational availability tool.
+ * Availability for the customer-facing message.
  *
  * It calls the SAME four-argument RPC as the booking form:
  *
@@ -20,50 +17,42 @@ import { MAX_RANGE_DAYS } from "@/lib/availability/constants";
  * No amount, no duration, no buffer, no caller-supplied probe times. Migration
  * 0007 removed the amount-taking signature because varying it let a caller
  * binary-search a hidden appointment's start time. Nothing here may reintroduce
- * that, in any shape.
+ * that, in any shape. The RPC also skips slots that have already passed today,
+ * so a time the customer could not take is never advertised.
  *
- * Results are available rows only. There is deliberately no "why not" for a
- * slot that is missing: a hidden appointment simply removes it, and saying more
- * would disclose the thing the RPC exists to hide.
+ * The response carries ONLY dates and times. No staff id and no staff name is
+ * serialised at all, because the message never names anyone — collapsing the
+ * staff dimension server-side means there is nothing for the browser to leak.
  */
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const searchSchema = z.object({
-  scopeValue: z.string().optional(),
-  staffIds: z.array(z.string().uuid()).max(50),
   from: isoDate,
   to: isoDate,
 });
 
-export type AvailabilitySlot = {
-  staffId: string;
-  staffName: string;
-  date: string;
-  time: string;
-};
+export type CustomerSlot = { date: string; time: string };
 
-export type AvailabilitySearchResult =
-  | { status: "ok"; slots: AvailabilitySlot[] }
+export type CustomerAvailabilityResult =
+  | { status: "ok"; slots: CustomerSlot[] }
   | { status: "error"; error: AppError };
 
-export async function findTimesAction(raw: unknown): Promise<AvailabilitySearchResult> {
+export async function findCustomerAvailabilityAction(raw: unknown): Promise<CustomerAvailabilityResult> {
   const session = await getSessionContext();
   if (!session) return { status: "error", error: appError(AppErrorCode.NOT_AUTHORIZED) };
 
   const parsed = searchSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { status: "error", error: appError(AppErrorCode.VALIDATION_ERROR) };
-  }
-  const input = parsed.data;
+  if (!parsed.success) return { status: "error", error: appError(AppErrorCode.VALIDATION_ERROR) };
+  const { from, to } = parsed.data;
 
-  if (input.from > input.to) {
+  if (from > to) {
     return {
       status: "error",
       error: { ...appError(AppErrorCode.VALIDATION_ERROR), message: "The end date is before the start date." },
     };
   }
-  if (daysBetween(input.from, input.to) >= MAX_RANGE_DAYS) {
+  if (daysBetween(from, to) >= MAX_RANGE_DAYS) {
     return {
       status: "error",
       error: {
@@ -73,48 +62,63 @@ export async function findTimesAction(raw: unknown): Promise<AvailabilitySearchR
     };
   }
 
-  // Scope and the staff roster are re-derived from the session. A staff id the
-  // caller cannot see is dropped here, so a forged one behaves exactly like a
-  // random one: it simply is not asked about.
-  const scope = resolveScope(session, input.scopeValue ?? null);
-  const visible = await getCalendarStaff(session, scope);
-  const visibleIds = new Set(visible.map((s) => s.id));
-  const targets = input.staffIds.filter((id) => visibleIds.has(id));
+  // The operational team, resolved from the caller's own RLS-visible set. For a
+  // Partner Master this is simply their only workspace, so the same code path
+  // serves both and no private team can enter the customer message.
+  const context = await resolveBookingContext(session);
+  const workspace = await resolveOperationalWorkspace(context.workspaces.map((w) => w.id));
+  if (!workspace) return { status: "ok", slots: [] };
 
-  // Nothing askable — the same empty answer a genuinely empty schedule gives.
-  if (visible.length === 0 || (input.staffIds.length > 0 && targets.length === 0)) {
-    return { status: "ok", slots: [] };
-  }
+  const staffIds = context.workspaces.find((w) => w.id === workspace)?.staff.map((s) => s.id) ?? [];
+  if (staffIds.length === 0) return { status: "ok", slots: [] };
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("find_available_slots", {
-    p_staff_ids: targets.length > 0 ? targets : visible.map((s) => s.id),
-    p_from: input.from,
-    p_to: input.to,
-    // "All Operations" is virtual and has no id; omitting the workspace is what
-    // makes the RPC merge exactly the workspaces RLS already allows.
-    p_workspace_id: scope.kind === "workspace" ? scope.workspaceId : null,
+    p_staff_ids: staffIds,
+    p_from: from,
+    p_to: to,
+    p_workspace_id: workspace,
   });
 
-  if (error) return { status: "error", error: logAndMap("findTimes", error) };
+  if (error) return { status: "error", error: logAndMap("customerAvailability", error) };
 
-  const names = new Map(visible.map((s) => [s.id, s.name]));
-  const rows = (data ?? []) as Array<{ staff_id: string; slot_date: string; slot_time: string }>;
-
-  const slots = rows
-    // A row for someone this caller cannot name should never render. The RPC
-    // already scopes to their workspaces; this is the belt to that braces.
-    .filter((r) => names.has(r.staff_id))
-    .map((r) => ({
-      staffId: r.staff_id,
-      staffName: names.get(r.staff_id) as string,
-      date: r.slot_date,
-      time: r.slot_time.slice(0, 5),
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
-      || a.staffName.localeCompare(b.staffName));
+  // Collapse the staff dimension here, on the server. The customer does not
+  // care who comes, and the browser never needs to know.
+  const seen = new Set<string>();
+  const slots: CustomerSlot[] = [];
+  for (const r of (data ?? []) as Array<{ slot_date: string; slot_time: string }>) {
+    const time = r.slot_time.slice(0, 5);
+    const key = `${r.slot_date}|${time}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    slots.push({ date: r.slot_date, time });
+  }
+  slots.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
   return { status: "ok", slots };
+}
+
+/**
+ * Which workspace the customer-facing message speaks for.
+ *
+ * V1 convention: the workspace whose slug marks it as the operational team,
+ * falling back to the caller's only workspace. There is no is_private or
+ * is_customer_facing column on `workspaces` yet, so the slug is the closest
+ * thing to a stable marker — a display name would be worse, since names are
+ * meant to be editable.
+ */
+async function resolveOperationalWorkspace(visibleIds: string[]): Promise<string | null> {
+  if (visibleIds.length === 0) return null;
+  if (visibleIds.length === 1) return visibleIds[0] as string;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("workspaces")
+    .select("id, slug")
+    .in("id", visibleIds);
+
+  const rows = (data ?? []) as Array<{ id: string; slug: string }>;
+  return rows.find((w) => w.slug === OPERATIONAL_WORKSPACE_SLUG)?.id ?? (visibleIds[0] as string);
 }
 
 function daysBetween(from: string, to: string): number {

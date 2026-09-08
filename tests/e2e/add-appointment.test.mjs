@@ -33,7 +33,10 @@ try {
 
   const day = async (n) => (await fx.query(
     `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
-  const tomorrow = await day(1);
+  // The nearest day Jack is genuinely free, rather than a flat "tomorrow": a
+  // real appointment sitting in tomorrow's 10:00 slot made this whole suite
+  // fail on a PHYSICAL_OVERLAP that had nothing to do with what it tests.
+  const tomorrow = await fx.freeDate(ids.staff.jack, { offsetDays: 1 });
 
   // =========================================================================
   // 1. KC — Shared Team for Jack, then KC Private Team for Victor
@@ -605,12 +608,12 @@ try {
     await k.page.goto(`${BASE}/appointments/new`, { waitUntil: "load" });
     await k.page.waitForSelector("#apptDate");
     const minAttr = await k.page.getAttribute("#apptDate", "min");
-    const todayStr = await day(0);
     rec.check({
-      id: "PAST-01 date input discourages past dates", actor: "KC", setup: "-",
+      id: "PAST-01 the date input no longer blocks past dates", actor: "KC",
+      setup: "0010 made historical recording possible",
       action: "read the date input min attribute",
-      expected: `today in business time (${todayStr})`,
-      actual: String(minAttr), ok: minAttr === todayStr,
+      expected: "absent — blocking at the input would contradict a rule the database now allows",
+      actual: String(minAttr), ok: minAttr === null,
     });
 
     const yesterday = await day(-1);
