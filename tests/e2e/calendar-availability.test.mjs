@@ -423,6 +423,20 @@ try {
       ok: found.length === 0, security: true,
     });
     await ctx.close();
+
+    // Undo the membership NOW rather than at suite teardown. Left in place it
+    // gives Jack two eligible workspaces for every later block, which turns the
+    // normal one-tap assignment into the "Which team?" exception — the paste
+    // checks below were failing for exactly that reason.
+    if (existing.length > 0) {
+      await db.query(
+        `update public.staff_workspaces set is_active = $2 where id = $1`,
+        [existing[0].id, existing[0].is_active]);
+    } else {
+      await db.query(
+        `delete from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
+        [ids.staff.jack, ids.ws.private]);
+    }
   }
 
   // =========================================================================

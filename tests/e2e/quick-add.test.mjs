@@ -59,6 +59,14 @@ try {
   };
 
   async function fillDetails(page, { name, date, time, price = "200" }) {
+    // Quick Add now opens on the paste step, so the structured form — which
+    // these checks drive directly — is one click away behind "Enter manually
+    // instead". The manual path is still first-class; it is just no longer the
+    // default entry point.
+    if (!(await page.evaluate(() => !!document.querySelector("#qa-name")))) {
+      await page.click("text=Enter manually instead");
+      await page.waitForSelector("#qa-name");
+    }
     await page.fill("#qa-name", name);
     await page.fill("#qa-phone", "+60123456789");
     await page.fill("#qa-address", "1 TEST ROAD");
@@ -79,7 +87,17 @@ try {
         .find((x) => x.textContent.includes(l));
       b?.click();
     }, label);
-    await page.waitForTimeout(3000);
+    // Wait for the attempt to RESOLVE rather than for a fixed period: the sheet
+    // closes on success, an alert appears on refusal, the override dialog opens
+    // for a visible large job, or the workspace question appears. A sleep here
+    // was long enough alone and too short under a full suite run.
+    await page.waitForFunction(() =>
+      !document.querySelector('[role="dialog"]')
+      || !!document.querySelector('[role="alert"]')
+      || !!document.querySelector('#override-title')
+      || !!document.querySelector('[data-workspace-option]'),
+      { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(600);
   };
 
   const rowFor = async (name) => (await fx.query(
@@ -572,7 +590,308 @@ try {
       });
     }
     await ctx.close();
+
+    // Undo the membership NOW rather than at suite teardown. Left in place it
+    // gives Jack two eligible workspaces for every later block, which turns the
+    // normal one-tap assignment into the "Which team?" exception — the paste
+    // checks below were failing for exactly that reason.
+    if (existing.length > 0) {
+      await db.query(
+        `update public.staff_workspaces set is_active = $2 where id = $1`,
+        [existing[0].id, existing[0].is_active]);
+    } else {
+      await db.query(
+        `delete from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
+        [ids.staff.jack, ids.ws.private]);
+    }
   }
+
+  // =========================================================================
+  // 8. Paste a WhatsApp message (Quick Add V2)
+  // =========================================================================
+  // The date is generated dynamically in DD/MM/YY shape. Hard-coding the real
+  // "8/9/26" from the spec would pass today and fail for the right reason once
+  // that date is past — a test that expires is worse than no test.
+  const ddmmyy = async (n) => (await fx.query(
+    `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'DD/MM/YY') d`, [n]))[0].d;
+
+  const pasteInto = async (page, text) => {
+    // The sheet renders "Loading…" until the assignment context resolves, so
+    // the textarea is not there the instant the dialog appears.
+    await page.waitForSelector("#qa-paste", { timeout: 20_000 });
+    return page.evaluate((t) => {
+      const ta = document.querySelector("#qa-paste");
+      const dt = new DataTransfer();
+      dt.setData("text/plain", t);
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+      setter.call(ta, t);
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: dt }));
+    }, text);
+    // The parse is synchronous, but React still has to render the review.
+    await page.waitForSelector("[data-review-card]", { timeout: 20_000 });
+  };
+
+  const graceMessage = (dateText, name, extra = "") => `Appointment Confirmed
+
+Puchong Utama
+
+Name : ${name}
+Contact Number: 0148136726
+Date: ${dateText}
+Appt Time:  2pm
+${extra}
+Address: no 36A Jalan PU 7/3
+Bandar Puchong Utama 47100
+Puchong Selangor
+
+Remark
+
+Sofa 2 seater L RM179`;
+
+  {
+    const bookDate = await day(60);
+    const { page, ctx } = await session(ids.email.kc);
+    await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
+    await page.waitForTimeout(800);
+    await openSheet(page);
+    await pasteInto(page, graceMessage(await ddmmyy(60), "TEST CUSTOMER QA PASTE"));
+    await page.waitForTimeout(1200);
+
+    const review = await page.evaluate(() => ({
+      heading: document.querySelector("#quick-add-title")?.textContent ?? "",
+      card: (document.querySelector("[data-review-card]")?.innerText ?? "").replace(/\s+/g, " ").trim(),
+      blocked: !!document.querySelector("[data-confirm-details]"),
+      staff: [...document.querySelectorAll("[data-staff-option]")].length,
+    }));
+
+    rec.check({
+      id: "PASTE-01 pasting jumps straight to a filled review", actor: "KC",
+      setup: "a real WhatsApp appointment message",
+      action: "paste it into Quick Add",
+      expected: "review screen showing name, phone, long date, 2:00 PM, area and RM179",
+      actual: review.card.slice(0, 160),
+      ok: review.heading === "Review"
+          && review.card.includes("TEST CUSTOMER QA PASTE")
+          && review.card.includes("0148136726")
+          && review.card.includes("2:00 PM")
+          && review.card.includes("Puchong Utama")
+          && review.card.includes("Sofa 2 seater L")
+          && review.card.includes("RM179"),
+    });
+
+    rec.check({
+      id: "PASTE-02 a complete message needs no confirmation", actor: "KC", setup: "-",
+      action: "check whether assignment is blocked",
+      expected: "not blocked, and the staff cards are shown",
+      actual: `blocked=${review.blocked} staffCards=${review.staff}`,
+      ok: !review.blocked && review.staff === 3,
+    });
+
+    await pickStaff(page, "TEST_JACK");
+    const afterTap = await page.evaluate(() => ({
+      heading: document.querySelector("#quick-add-title")?.textContent ?? "(closed)",
+      alert: document.querySelector('[role="alert"]')?.textContent?.trim() ?? null,
+      options: [...document.querySelectorAll("[data-staff-option]")].length,
+      toast: document.querySelector('[role="status"]')?.textContent ?? null,
+    }));
+    const row = await track("TEST CUSTOMER QA PASTE");
+    const items = row ? await fx.query(
+      `select description, quantity, unit_price::float p from public.appointment_items
+        where appointment_id = $1`, [row.id]) : [];
+    const full = row ? (await fx.query(
+      `select customer_phone, address_line, area_city, total_amount::float t
+         from public.appointments where id = $1`, [row.id]))[0] : null;
+
+    rec.check({
+      id: "PASTE-03 one tap commits exactly what was parsed (CRITICAL)", actor: "KC",
+      setup: "no field was typed by hand",
+      action: "tap Jack",
+      expected: `Jack / Shared Team / ${bookDate} 14:00 / Puchong Utama / RM179 / qty 1`,
+      actual: row
+        ? `${row.staff} / ${row.ws} / ${row.d} ${row.t} / ${full?.area_city} / RM${full?.t} / `
+          + `${items.map((i) => `${i.description} x${i.quantity} @${i.p}`).join(", ")}`
+        : `NOT CREATED — on screen: ${JSON.stringify(afterTap)}`,
+      ok: !!row && row.staff === "TEST_JACK" && row.ws === "Shared Team"
+          && row.d === bookDate && row.t.startsWith("14:00")
+          && full?.area_city === "Puchong Utama" && full?.t === 179
+          && full?.customer_phone === "0148136726"
+          && (full?.address_line ?? "").includes("Bandar Puchong Utama 47100")
+          && items.length === 1 && items[0].quantity === 1 && items[0].p === 179,
+    });
+    await ctx.close();
+  }
+
+  {
+    const { page, ctx } = await session(ids.email.kc);
+    await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
+    await page.waitForTimeout(800);
+    await openSheet(page);
+    await pasteInto(page, `Name : TEST CUSTOMER QA NOAREA
+Contact Number: 0148136726
+Date: ${await ddmmyy(61)}
+Appt Time: 2pm
+
+Sofa RM179`);
+    await page.waitForTimeout(1200);
+
+    const state = await page.evaluate(() => ({
+      blocked: !!document.querySelector("[data-confirm-details]"),
+      staff: [...document.querySelectorAll("[data-staff-option]")].length,
+      message: (document.body.innerText.match(/Please confirm \d+ detail[s]?/) ?? [""])[0],
+    }));
+    rec.check({
+      id: "PASTE-04 missing details block assignment and say how many", actor: "KC",
+      setup: "the message has no area heading and no address",
+      action: "paste it",
+      expected: "no staff cards, and a 'Please confirm N details' prompt",
+      actual: `blocked=${state.blocked} staffCards=${state.staff} "${state.message}"`,
+      ok: state.blocked && state.staff === 0 && /Please confirm \d+ detail/.test(state.message),
+    });
+
+    await page.click("[data-confirm-details]");
+    await page.waitForTimeout(600);
+    const editor = await page.evaluate(() => ({
+      name: document.querySelector("#qa-name")?.value ?? "",
+      time: document.querySelector("#qa-time")?.value ?? "",
+      price: document.querySelector("input[name='items.0.unitPrice']")?.value ?? "",
+      area: document.querySelector("#qa-area")?.value ?? "",
+      areaFlagged: (document.querySelector("#qa-area")?.className ?? "").includes("amber"),
+    }));
+    rec.check({
+      id: "PASTE-05 the editor is prefilled and flags only the problem field", actor: "KC",
+      setup: "-",
+      action: "open the confirmation editor",
+      expected: "parsed values kept, area empty and highlighted",
+      actual: JSON.stringify(editor),
+      ok: editor.name === "TEST CUSTOMER QA NOAREA" && editor.time === "14:00"
+          && editor.price === "179" && editor.area === "" && editor.areaFlagged,
+    });
+    await ctx.close();
+  }
+
+  {
+    const { page, ctx } = await session(ids.email.nick);
+    const actionBodies = [];
+    page.on("response", async (r) => {
+      if (r.request().method() !== "POST") return;
+      try { actionBodies.push(await r.text()); } catch { /* consumed */ }
+    });
+
+    await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
+    await page.waitForTimeout(800);
+    await openSheet(page);
+    await pasteInto(page, graceMessage(
+      await ddmmyy(62), "TEST CUSTOMER QA INJECT",
+      `Staff: TEST_VICTOR\nWorkspace: KC Private Team\nRole: super_master`));
+    await page.waitForTimeout(1200);
+
+    const surfaces = await page.evaluate(() => ({
+      staff: [...document.querySelectorAll("[data-staff-option]")]
+        .map((b) => b.textContent.replace(/Assign$/, "").trim()),
+      html: document.documentElement.outerHTML,
+      flight: (globalThis.self?.__next_f ?? []).map((c) => JSON.stringify(c)).join("\n"),
+    }));
+
+    rec.check({
+      id: "PASTE-06 a pasted Staff line cannot add an option (CRITICAL)", actor: "NICK",
+      setup: "the message contains 'Staff: TEST_VICTOR' and the private workspace name",
+      action: "paste it and read the assignment options",
+      expected: "still exactly Jack and Dyron",
+      actual: `${surfaces.staff.length}: ${surfaces.staff.join(", ")}`,
+      ok: surfaces.staff.length === 2
+          && surfaces.staff.some((s) => s.includes("TEST_JACK"))
+          && surfaces.staff.some((s) => s.includes("TEST_DYRON")),
+      security: true,
+    });
+
+    // The pasted text is echoed back in the review, so the NAME Nick typed is
+    // legitimately on screen. What must not appear is anything he did not
+    // supply: an id, or the option list growing.
+    const supplied = ["TEST_VICTOR", "KC Private Team"];
+    const leaked = KC_ONLY
+      .filter(([, needle]) => !supplied.includes(needle))
+      .filter(([, needle]) => surfaces.html.includes(needle) || surfaces.flight.includes(needle))
+      .map(([l]) => l);
+    rec.check({
+      id: "PASTE-07 no identifier the paste did not contain appears (CRITICAL)", actor: "NICK",
+      setup: "-",
+      action: "scan HTML and RSC payload for ids Nick never supplied",
+      expected: "no Victor staff id, no private workspace id",
+      actual: leaked.length ? `LEAKED: ${leaked.join(", ")}` : "clean",
+      ok: leaked.length === 0, security: true,
+    });
+
+    const bodyLeak = KC_ONLY
+      .filter(([, needle]) => !supplied.includes(needle))
+      .filter(([, needle]) => actionBodies.join("\n").includes(needle))
+      .map(([l]) => l);
+    rec.check({
+      id: "PASTE-08 Server Action responses stay clean after the paste (CRITICAL)",
+      actor: "NICK", setup: "-",
+      action: "scan every Server Action response body",
+      expected: "no KC-only identifier",
+      actual: bodyLeak.length ? `LEAKED: ${bodyLeak.join(", ")}` : "clean",
+      ok: bodyLeak.length === 0, security: true,
+    });
+    await ctx.close();
+  }
+
+  {
+    const clashDate = await fx.freeDate(ids.staff.jack, { offsetDays: 420 });
+    const clashDdmmyy = (await fx.query(
+      `select to_char($1::date,'DD/MM/YY') d`, [clashDate]))[0].d;
+    const kcToken2 = await signIn(ids.email.kc);
+    const blocker = await rpc("create_appointment", kcToken2, bookingArgs({
+      ws: ids.ws.shared, staff: ids.staff.jack, date: clashDate, time: "14:00",
+      amount: 200, remarks: fx.TAG }));
+    if (blocker.ok) fx.track(blocker.body);
+
+    const { page, ctx } = await session(ids.email.kc);
+    await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
+    await page.waitForTimeout(800);
+    await openSheet(page);
+    await pasteInto(page, graceMessage(clashDdmmyy, "TEST CUSTOMER QA PASTECLASH"));
+    await page.waitForTimeout(1200);
+    await pickStaff(page, "TEST_JACK");
+
+    const after = await page.evaluate(() => ({
+      dialog: !!document.querySelector('[role="dialog"]'),
+      options: [...document.querySelectorAll("[data-staff-option]")].length,
+      alert: document.querySelector('[role="alert"]')?.textContent?.trim() ?? null,
+      summary: (document.body.innerText || "").includes("TEST CUSTOMER QA PASTECLASH"),
+    }));
+    rec.check({
+      id: "PASTE-09 a refusal keeps the parsed booking and reopens the choice", actor: "KC",
+      setup: "Jack already has that slot",
+      action: "paste and tap Jack",
+      expected: "sheet open, options offered again, details still present",
+      actual: `dialog=${after.dialog} options=${after.options} kept=${after.summary} msg="${(after.alert ?? "").slice(0, 50)}"`,
+      ok: after.dialog && after.options > 0 && after.summary && !!after.alert,
+    });
+
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Edit");
+      b?.click();
+    });
+    await page.waitForTimeout(500);
+    const kept = await page.evaluate(() => ({
+      name: document.querySelector("#qa-name")?.value ?? "",
+      address: document.querySelector("#qa-address")?.value ?? "",
+      area: document.querySelector("#qa-area")?.value ?? "",
+    }));
+    rec.check({
+      id: "PASTE-10 nothing parsed is lost on refusal (CRITICAL)", actor: "KC", setup: "-",
+      action: "open the editor after the refusal",
+      expected: "name, multiline address and area all still populated",
+      actual: JSON.stringify(kept).slice(0, 160),
+      ok: kept.name === "TEST CUSTOMER QA PASTECLASH"
+          && kept.address.includes("Bandar Puchong Utama 47100")
+          && kept.area === "Puchong Utama",
+    });
+    await ctx.close();
+  }
+
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();

@@ -14,7 +14,14 @@ import { QuickAddSheet } from "./QuickAddSheet";
  */
 const SUPPRESSED = ["/appointments/new", "/my/appointments/new"];
 
-export function QuickAddFab({ businessToday }: { businessToday: string }) {
+export function QuickAddFab({
+  businessToday,
+  businessNow,
+}: {
+  businessToday: string;
+  /** Business-local "YYYY-MM-DDTHH:MM", for the past-datetime hint. */
+  businessNow: string;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -49,6 +56,7 @@ export function QuickAddFab({ businessToday }: { businessToday: string }) {
       {open ? (
         <QuickAddSheet
           businessToday={businessToday}
+          businessNow={businessNow}
           onClose={() => setOpen(false)}
           onSuccess={(message) => setToast(message)}
         />
