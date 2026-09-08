@@ -16,7 +16,7 @@
 // ARE present for KC, so a test that silently stopped finding anything would
 // fail rather than pass vacuously.
 //
-// Requires a running app. Defaults to http://localhost:3000; override with
+// Requires a running app. Defaults to http://localhost:3100; override with
 // E2E_BASE_URL. Run: npm run test:e2e:privacy
 
 import { chromium } from "playwright";
@@ -25,7 +25,7 @@ import {
   createRecorder, rpc, signIn, bookingArgs, CONFIG,
 } from "../../supabase/tests/lib/harness.mjs";
 
-const BASE = (process.env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$/, "");
 const PASSWORD = CONFIG.testPassword();
 
 assertDevProject();

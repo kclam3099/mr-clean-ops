@@ -16,7 +16,7 @@ import {
   createRecorder, CONFIG, signIn, rpc, bookingArgs,
 } from "../../supabase/tests/lib/harness.mjs";
 
-const BASE = (process.env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$/, "");
 const PASSWORD = CONFIG.testPassword();
 
 const VIEWPORTS = [

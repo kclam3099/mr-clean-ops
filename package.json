@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev --webpack -p 3100 -H 127.0.0.1",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build --webpack",
-    "start": "next start",
+    "start": "next start -p 3100 -H 127.0.0.1",
     "lint": "eslint",
     "test:unit": "node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON \"tests/unit/**/*.test.mjs\"",
     "test:e2e:privacy": "node tests/e2e/cross-user-privacy.test.mjs",

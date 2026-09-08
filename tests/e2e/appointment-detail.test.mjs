@@ -8,7 +8,7 @@
 // Server Actions are public endpoints, so the mutation tests post directly to
 // them rather than only driving the UI.
 //
-// Requires a running app (E2E_BASE_URL, default http://localhost:3000).
+// Requires a running app (E2E_BASE_URL, default http://localhost:3100).
 // Run: npm run test:e2e:f3
 
 import { chromium } from "playwright";
@@ -17,7 +17,7 @@ import {
   createRecorder, CONFIG, signIn, rpc, bookingArgs,
 } from "../../supabase/tests/lib/harness.mjs";
 
-const BASE = (process.env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$/, "");
 const PASSWORD = CONFIG.testPassword();
 const RANDOM_UUID = "00000000-0000-4000-8000-0000000000ff";
 

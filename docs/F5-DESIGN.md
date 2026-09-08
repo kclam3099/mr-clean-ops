@@ -7,6 +7,26 @@ revisited without a new approval.
 Delivered in `01b9271`, `d642a10`, `5527e56` and `1de0d1c`, on top of this
 design at `1d931c6`.
 
+**Quick Add V2 — paste a WhatsApp message — is DONE**, delivered in `93c85e5`.
+Pasting parses locally and deterministically, review and assignment share one
+screen, and one tap on a staff card still means ASSIGN + CREATE. The locked
+decisions behind it: no external AI or LLM and no customer data sent to any
+third party; DD/MM/YY Malaysia dates; past/future validated on the COMBINED
+appointment datetime against an injectable clock; a trailing RM amount is the
+line TOTAL with quantity fixed at 1 and quantity-like wording kept inside the
+description; no amount-aware availability pre-flight; the raw message is not
+persisted; the structured form remains the Edit and fallback path; Nick still
+sees Jack and Dyron only; and pasted `Staff:` / `Workspace:` / `Role:` text
+carries zero authorization meaning, because the parser's output type has no
+such field.
+
+### Local hosting
+
+Until the site moves to its own domain, the app is served from a production
+build on **http://localhost:3100**, bound to `127.0.0.1`. Port 3000 is left
+alone: another project on this machine uses it. `npm run dev` and `npm start`
+both target 3100, and the E2E suites default to it.
+
 Feature ledger:
 
 | Phase | Scope | Status |
@@ -16,6 +36,7 @@ Feature ledger:
 | F3 | Appointment detail / lifecycle | DONE |
 | F4 | Operational dashboard | DONE |
 | F5 | Calendar operations / availability UX / Quick Add | **DONE** |
+| F5.1 | Quick Add V2 — paste a WhatsApp message | **DONE** |
 
 Migrations `0001–0009` are locked. **F5 added none and edited none** — the
 whole implementation range touches no file under `supabase/migrations/`.

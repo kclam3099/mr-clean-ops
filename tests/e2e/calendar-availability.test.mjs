@@ -14,7 +14,7 @@ import {
   createRecorder, CONFIG, signIn, rpc, bookingArgs, SYNTHETIC_PRIVATE_CUSTOMER,
 } from "../../supabase/tests/lib/harness.mjs";
 
-const BASE = (process.env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$/, "");
 const PASSWORD = CONFIG.testPassword();
 const RANDOM_WS = "11111111-2222-4333-8444-555555555555";
 

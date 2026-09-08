@@ -7,7 +7,7 @@
 // tests exercise what a caller can actually submit, not merely what the form
 // chose to render.
 //
-// Requires a running app (E2E_BASE_URL, default http://localhost:3000).
+// Requires a running app (E2E_BASE_URL, default http://localhost:3100).
 // Run: npm run test:e2e:f2
 
 import { chromium } from "playwright";
@@ -16,7 +16,7 @@ import {
   createRecorder, CONFIG,
 } from "../../supabase/tests/lib/harness.mjs";
 
-const BASE = (process.env.E2E_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$/, "");
 const PASSWORD = CONFIG.testPassword();
 const RANDOM_UUID = "00000000-0000-4000-8000-0000000000ff";
 
@@ -741,7 +741,15 @@ try {
   {
     const { page, ctx } = await session(ids.email.nick);
     await page.goto(`${BASE}/calendar?week=${tomorrow}`, { waitUntil: "load" });
-    await page.waitForSelector("header nav a");
+    // The header lives in the layout and renders immediately, so waiting for it
+    // proves nothing about the calendar — against a production build the
+    // snapshot below caught the loading skeleton instead of the appointments,
+    // which would have made the PRIV-01 scan pass over an empty page. Wait for
+    // streaming to finish, then for the grid itself.
+    await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 })
+      .catch(() => {});
+    await page.waitForSelector("table, nav[aria-label='Day of week']", { timeout: 20_000 });
+    await page.waitForTimeout(500);
     const snap = await page.evaluate(() => ({
       html: document.documentElement.outerHTML,
       flight: (globalThis.self?.__next_f ?? []).map((c) => JSON.stringify(c)).join("\n"),
