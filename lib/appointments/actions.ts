@@ -1,9 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/serverClient";
 import { getSessionContext } from "@/lib/auth/session";
 import { resolveBookingContext, assertBookable } from "@/lib/appointments/context";
+import { bookAppointment } from "@/lib/appointments/booking";
 import { parseFormData, fieldErrors, availabilitySchema } from "@/lib/appointments/schema";
 import { logAndMap, appError, AppErrorCode, type AppError } from "@/lib/errors/appError";
 import { resolveReturnPath } from "@/lib/navigation/return-to";
@@ -44,58 +44,30 @@ export async function createAppointmentAction(
 
   // Re-derive what this caller may book. The form's own options are irrelevant.
   const context = await resolveBookingContext(session);
-  const allowed = assertBookable(context, input.workspaceId, input.staffId ?? null);
-  if (!allowed.ok) {
-    // Deliberately the same generic response for "workspace you cannot see",
-    // "staff you cannot see" and "staff not in that workspace". Distinguishing
-    // them would confirm which entities exist.
-    console.warn(`[createAppointment] rejected ${allowed.field} for ${session.role}`);
-    return {
-      status: "error",
-      error: appError(AppErrorCode.NOT_AUTHORIZED),
-      fields: { [allowed.field]: "Choose a valid option." },
-    };
-  }
 
-  // Staff may not override, and their identity is server-derived.
-  const isMaster = context.mode === "master";
-  const overrideReason = isMaster ? input.overrideReason : null;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("create_appointment", {
-    p_workspace_id: input.workspaceId,
-    // null for staff: the RPC resolves the caller's own staff row from the JWT.
-    p_staff_id: isMaster ? input.staffId : null,
-    p_customer_name: input.customerName,
-    p_customer_phone: input.customerPhone,
-    p_address_line: input.addressLine,
-    p_area_city: input.areaCity,
-    p_appt_date: input.apptDate,
-    p_start_time: input.startTime,
-    p_items: input.items.map((i) => ({
-      description: i.description,
-      quantity: i.quantity,
-      unit_price: i.unitPrice,
-    })),
-    // The browser never supplies duration, buffer, totals or large-job status.
-    p_final_duration_override_min: null,
-    p_remarks: input.remarks,
-    p_large_job_override_reason: overrideReason,
+  // Authorization, the RPC call and cache invalidation all live in the shared
+  // core, so this surface and Quick Add cannot drift apart.
+  const outcome = await bookAppointment(context, {
+    workspaceId: input.workspaceId,
+    staffId: input.staffId ?? null,
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
+    addressLine: input.addressLine,
+    areaCity: input.areaCity,
+    apptDate: input.apptDate,
+    startTime: input.startTime,
+    items: input.items,
+    remarks: input.remarks,
+    overrideReason: input.overrideReason,
   });
 
-  if (error) {
-    return { status: "error", error: logAndMap("createAppointment", error) };
-  }
-
-  // Refresh every surface that could show the new row. Cheap, and avoids a
-  // stale agenda after redirect.
-  for (const path of ["/calendar", "/appointments", "/my/today", "/my/tomorrow", "/my/month"]) {
-    revalidatePath(path);
-  }
+  if (outcome.status === "error") return outcome;
 
   return {
     status: "success",
-    appointmentId: data as string,
+    appointmentId: outcome.appointmentId,
+    // Navigation is this surface's concern: the page redirects, Quick Add
+    // refreshes in place, so the core does not decide it.
     redirectTo: resolveReturnPath(input.returnTo, context.mode),
   };
 }
