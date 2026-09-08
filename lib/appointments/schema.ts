@@ -71,6 +71,24 @@ export const createAppointmentSchema = z.object({
 
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;
 
+/**
+ * Quick Add sends the same booking, minus the workspace.
+ *
+ * The workspace is DERIVED server-side from the staff member chosen at the end
+ * of the flow, so the browser never picks it. `workspaceId` is optional here
+ * only for the multi-workspace exception, where the server asked the question
+ * and the answer comes back — and even then it is re-checked against the
+ * caller's own eligible set before it is used.
+ *
+ * `returnTo` is absent by design: Quick Add is an overlay and refreshes in
+ * place rather than navigating, so there is no destination to be tricked into.
+ */
+export const quickAddSchema = createAppointmentSchema
+  .omit({ workspaceId: true, returnTo: true })
+  .extend({ workspaceId: uuid.optional() });
+
+export type QuickAddInput = z.infer<typeof quickAddSchema>;
+
 export const availabilitySchema = z.object({
   workspaceId: uuid,
   staffId: uuid,

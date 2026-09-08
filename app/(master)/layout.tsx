@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionContext, homePathFor } from "@/lib/auth/session";
 import { resolveScope } from "@/lib/workspace/scope";
 import { MasterNav } from "@/components/nav/MasterNav";
+import { QuickAddFab } from "@/components/quick-add/QuickAddFab";
+import { businessToday } from "@/lib/agenda/queries";
 
 /**
  * Master shell. The role check here is a UX guard — Row Level Security is the
@@ -23,6 +25,9 @@ export default async function MasterLayout({ children }: { children: React.React
     <div className="min-h-screen bg-slate-50">
       <MasterNav session={session} scope={scope} />
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      {/* The assignment list is NOT passed here — the sheet fetches it on open,
+          so no staff array reaches this page's RSC payload. */}
+      <QuickAddFab businessToday={businessToday()} />
     </div>
   );
 }
