@@ -3,7 +3,6 @@ import { getSessionContext, homePathFor } from "@/lib/auth/session";
 import { resolveScope } from "@/lib/workspace/scope";
 import { MasterNav } from "@/components/nav/MasterNav";
 import { QuickAddFab } from "@/components/quick-add/QuickAddFab";
-import { businessToday } from "@/lib/agenda/queries";
 import { businessNowLocal } from "@/lib/appointments/message-parser";
 
 /**
@@ -28,7 +27,7 @@ export default async function MasterLayout({ children }: { children: React.React
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
       {/* The assignment list is NOT passed here — the sheet fetches it on open,
           so no staff array reaches this page's RSC payload. */}
-      <QuickAddFab businessToday={businessToday()} businessNow={businessNowLocal()} />
+      <QuickAddFab businessNow={businessNowLocal()} />
     </div>
   );
 }

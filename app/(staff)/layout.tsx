@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getSessionContext, homePathFor } from "@/lib/auth/session";
 import { StaffNav } from "@/components/nav/StaffNav";
 import { QuickAddFab } from "@/components/quick-add/QuickAddFab";
-import { businessToday } from "@/lib/agenda/queries";
 import { businessNowLocal } from "@/lib/appointments/message-parser";
 
 /**
@@ -21,7 +20,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       <StaffNav session={session} />
       <main className="mx-auto max-w-2xl px-4 py-5">{children}</main>
       {/* Staff Quick Add is one step — no assignment list is ever fetched. */}
-      <QuickAddFab businessToday={businessToday()} businessNow={businessNowLocal()} />
+      <QuickAddFab businessNow={businessNowLocal()} />
     </div>
   );
 }

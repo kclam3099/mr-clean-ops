@@ -9,8 +9,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  parseAppointmentMessage, flagPastDateTime, looksLikeAppointment, itemsTotal,
-  businessNowLocal,
+  parseAppointmentMessage, markPastDateTime, isPastDateTime, looksLikeAppointment,
+  itemsTotal, businessNowLocal,
 } from "../../lib/appointments/message-parser.ts";
 
 /** 8 September 2026, 11:00 in Kuala Lumpur — the morning of the Grace job. */
@@ -35,7 +35,7 @@ Sofa 2 seater L RM179`;
 
 // 1. the exact real-world message
 test("parses the Grace message exactly", () => {
-  const p = flagPastDateTime(parseAppointmentMessage(GRACE), CLOCK);
+  const p = markPastDateTime(parseAppointmentMessage(GRACE), CLOCK);
 
   assert.equal(p.customerName, "Grace");
   assert.equal(p.phone, "0148136726");
@@ -81,7 +81,7 @@ test("a message header is not mistaken for a place", () => {
 
 // 2. a second realistic shape
 test("parses a compact message", () => {
-  const p = flagPastDateTime(parseAppointmentMessage(
+  const p = markPastDateTime(parseAppointmentMessage(
     `Name: Ahmad
 Contact: 0123456789
 Date: 10/9/26
@@ -329,7 +329,7 @@ Sofa RM179`);
 
 // 20. junk tolerance
 test("unrecognised lines are ignored without breaking the parse", () => {
-  const p = flagPastDateTime(parseAppointmentMessage(
+  const p = markPastDateTime(parseAppointmentMessage(
     `Thanks for booking!!!
 😀😀😀
 Puchong Utama
@@ -345,36 +345,54 @@ Please share this message`), CLOCK);
 });
 
 // ---- past / future, with an injected clock --------------------------------
-test("2pm today is future at 11am, and is not flagged", () => {
-  const p = flagPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T11:00");
+//
+// The rule CHANGED with migration 0010: a past appointment is recordable, so
+// the parser MARKS it rather than demoting its fields. Pushing the owner into
+// the correction form for a job that simply already happened is exactly the
+// friction the paste flow exists to remove.
+
+test("2pm today is future at 11am, and is not marked past", () => {
+  const p = markPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T11:00");
+  assert.equal(p.isPast, false);
   assert.equal(p.status.date, "FOUND");
   assert.equal(p.status.time, "FOUND");
   assert.deepEqual(p.confirmationFields, []);
 });
 
-test("10am today is past at 11am, and is flagged", () => {
+test("10am today IS past at 11am — marked, but still valid data", () => {
   const morning = GRACE.replace("Appt Time:  2pm", "Appt Time: 10am");
-  const p = flagPastDateTime(parseAppointmentMessage(morning), "2026-09-08T11:00");
-  assert.equal(p.status.date, "NEEDS_CONFIRMATION");
-  assert.equal(p.status.time, "NEEDS_CONFIRMATION");
-});
-
-test("the check is on the combined datetime, not the date alone", () => {
-  // Same date as the reference clock, later hour: must NOT be treated as past.
-  const p = flagPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T13:59");
+  const p = markPastDateTime(parseAppointmentMessage(morning), "2026-09-08T11:00");
+  assert.equal(p.isPast, true);
   assert.equal(p.status.date, "FOUND");
-  const p2 = flagPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T14:01");
-  assert.equal(p2.status.date, "NEEDS_CONFIRMATION");
+  assert.equal(p.status.time, "FOUND");
+  assert.deepEqual(p.confirmationFields, []);
+  assert.deepEqual(p.missingFields, []);
 });
 
-test("a past date is flagged whatever the hour", () => {
-  const p = flagPastDateTime(parseAppointmentMessage(GRACE), "2026-09-09T08:00");
-  assert.equal(p.status.date, "NEEDS_CONFIRMATION");
+test("past is decided by the combined datetime, not the date alone", () => {
+  assert.equal(markPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T13:59").isPast, false);
+  assert.equal(markPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T14:00").isPast, true);
+  assert.equal(markPastDateTime(parseAppointmentMessage(GRACE), "2026-09-08T14:01").isPast, true);
 });
 
-test("flagging never promotes an already-unparseable field", () => {
-  const p = flagPastDateTime(parseAppointmentMessage("Date: 12/13/26\nTime: 2pm"), CLOCK);
+test("a past date is marked whatever the hour", () => {
+  assert.equal(markPastDateTime(parseAppointmentMessage(GRACE), "2026-09-09T08:00").isPast, true);
+});
+
+test("marking never promotes an already-unparseable field", () => {
+  const p = markPastDateTime(parseAppointmentMessage("Date: 12/13/26\nTime: 2pm"), CLOCK);
   assert.equal(p.status.date, "NEEDS_CONFIRMATION");
+  assert.equal(p.isPast, false);
+});
+
+test("isPastDateTime compares the combined local datetime", () => {
+  assert.equal(isPastDateTime("2026-09-08", "14:00", "2026-09-08T11:00"), false);
+  assert.equal(isPastDateTime("2026-09-08", "10:00", "2026-09-08T11:00"), true);
+  // Equal counts as past — the database guard is `<= now()`.
+  assert.equal(isPastDateTime("2026-09-08", "11:00", "2026-09-08T11:00"), true);
+  // Nothing to compare yet is not "past".
+  assert.equal(isPastDateTime("", "10:00", "2026-09-08T11:00"), false);
+  assert.equal(isPastDateTime("2026-09-08", "", "2026-09-08T11:00"), false);
 });
 
 // ---- limits and edges -----------------------------------------------------

@@ -140,6 +140,7 @@ export async function quickAddCreateAction(raw: unknown): Promise<QuickAddResult
     items: input.items,
     remarks: input.remarks,
     overrideReason: input.overrideReason,
+    confirmPast: input.confirmPast,
   });
 
   if (outcome.status === "error") return outcome;

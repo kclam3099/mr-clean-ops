@@ -11,6 +11,8 @@ import { estimatedDurationMinutes, formatDuration, formatMoney, subtotal } from 
 import { ItemsEditor, initialItemRow, type ItemRow } from "./ItemsEditor";
 import { AvailabilitySuggestions } from "./AvailabilitySuggestions";
 import { OverrideDialog } from "./OverrideDialog";
+import { PastAppointmentDialog } from "./PastAppointmentDialog";
+import { isPastDateTime } from "@/lib/appointments/message-parser";
 
 /**
  * One form for both roles. `context.mode` decides what renders; the server
@@ -23,6 +25,7 @@ export function AppointmentForm({
   initialDate,
   initialTime,
   businessToday,
+  businessNow,
 }: {
   context: BookingContext;
   config: BookingConfig;
@@ -30,6 +33,8 @@ export function AppointmentForm({
   initialDate?: string;
   initialTime?: string;
   businessToday: string;
+  /** Business-local "YYYY-MM-DDTHH:MM", for the past-appointment prompt. */
+  businessNow: string;
 }) {
   const router = useRouter();
   const isMaster = context.mode === "master";
@@ -43,6 +48,10 @@ export function AppointmentForm({
 
   const [result, setResult] = useState<CreateResult | null>(null);
   const [overrideFor, setOverrideFor] = useState<AppError | null>(null);
+  // Recording a job that already happened is normal, but never silent. Kept
+  // once confirmed, so an override retry does not ask a second time.
+  const [pastConfirmed, setPastConfirmed] = useState(false);
+  const [pastPrompt, setPastPrompt] = useState(false);
   const [pending, startTransition] = useTransition();
 
   // Keyed by the inputs that produced it, so a stale result for a previous
@@ -104,7 +113,7 @@ export function AppointmentForm({
   const fieldError = (name: string) =>
     result?.status === "error" ? result.fields?.[name] : undefined;
 
-  function buildFormData(overrideReason?: string): FormData {
+  function buildFormData(overrideReason?: string, confirmPast?: boolean): FormData {
     const fd = new FormData();
     fd.set("workspaceId", workspaceId);
     if (isMaster && staffId) fd.set("staffId", staffId);
@@ -122,13 +131,26 @@ export function AppointmentForm({
     });
     if (returnTo) fd.set("returnTo", returnTo);
     if (overrideReason) fd.set("overrideReason", overrideReason);
+    // 0010. Only the literal string "true" is consent, and the database
+    // refuses a past datetime without it.
+    if (confirmPast) fd.set("confirmPast", "true");
     return fd;
   }
 
-  function submit(overrideReason?: string) {
+  const looksPast = () => isPastDateTime(apptDate, startTime, businessNow);
+
+  /** Save, gated on confirming a historical record first. */
+  function attemptSubmit(overrideReason?: string) {
+    if (pending) return;
+    if (looksPast() && !pastConfirmed) { setPastPrompt(true); return; }
+    submit(overrideReason);
+  }
+
+  function submit(overrideReason?: string, confirmPastNow?: boolean) {
     if (pending) return;                     // guards against double submit
     startTransition(async () => {
-      const res = await createAppointmentAction(null, buildFormData(overrideReason));
+      const res = await createAppointmentAction(
+        null, buildFormData(overrideReason, confirmPastNow ?? pastConfirmed));
       setResult(res);
 
       if (res.status === "success") {
@@ -143,6 +165,10 @@ export function AppointmentForm({
       // hidden from this caller, so there is nothing they may override.
       if (res.error.code === AppErrorCode.LARGE_JOB_OVERRIDE_REQUIRED && isMaster) {
         setOverrideFor(res.error);
+      } else if (res.error.code === AppErrorCode.PAST_DATETIME) {
+        // The server is the authority on "past" — ask rather than dead-end.
+        setOverrideFor(null);
+        setPastPrompt(true);
       } else {
         setOverrideFor(null);
       }
@@ -156,7 +182,7 @@ export function AppointmentForm({
     <>
       <form
         ref={formRef}
-        onSubmit={(e) => { e.preventDefault(); submit(); }}
+        onSubmit={(e) => { e.preventDefault(); attemptSubmit(); }}
         className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
       >
         <div className="min-w-0 space-y-6">
@@ -242,7 +268,8 @@ export function AppointmentForm({
             <Field label="Date" htmlFor="apptDate" error={fieldError("apptDate")}>
               <input
                 id="apptDate" type="date" value={apptDate}
-                min={businessToday}
+                // No `min`: a past date is now selectable, and confirmed at
+                // save time rather than blocked at the input.
                 onChange={(e) => setApptDate(e.target.value)}
                 disabled={pending} className={inputClass}
               />
@@ -293,6 +320,16 @@ export function AppointmentForm({
           </div>
         </aside>
       </form>
+
+      {pastPrompt ? (
+        <PastAppointmentDialog
+          date={apptDate}
+          time={startTime}
+          pending={pending}
+          onCancel={() => setPastPrompt(false)}
+          onConfirm={() => { setPastPrompt(false); setPastConfirmed(true); submit(undefined, true); }}
+        />
+      ) : null}
 
       {overrideFor ? (
         <OverrideDialog

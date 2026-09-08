@@ -50,6 +50,11 @@ export const createAppointmentSchema = z.object({
 
   items: z.array(itemSchema).min(1, "Add at least one service item").max(50),
 
+  // Present only when the user has explicitly confirmed a historical record.
+  // Anything other than the literal true is false, so a stray or malformed
+  // value cannot become consent.
+  confirmPast: z.coerce.boolean().optional().transform((v) => v === true),
+
   // Present only on the override retry. A non-empty reason is required there;
   // whether the caller MAY override is decided by the database.
   overrideReason: z
@@ -128,6 +133,7 @@ export function parseFormData(formData: FormData) {
     startTime: str("startTime"),
     items: items.filter(Boolean),
     overrideReason: str("overrideReason"),
+    confirmPast: str("confirmPast") === "true",
     returnTo: str("returnTo"),
   });
 }

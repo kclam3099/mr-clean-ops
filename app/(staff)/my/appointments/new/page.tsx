@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { resolveBookingContext } from "@/lib/appointments/context";
 import { getBookingConfig } from "@/lib/booking-config/queries";
 import { businessToday } from "@/lib/agenda/queries";
+import { businessNowLocal } from "@/lib/appointments/message-parser";
 import { AppointmentForm } from "@/components/appointment-form/AppointmentForm";
 
 export const metadata = { title: "New appointment — Mr Clean & Clean Ops" };
@@ -34,8 +35,9 @@ export default async function NewStaffAppointmentPage({
   ]);
 
   const today = businessToday();
-  const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) && params.date >= today
-    ? params.date : undefined;
+  // A past date is no longer rejected as a hint: historical appointments are
+  // recordable, and the confirmation happens at save time.
+  const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : undefined;
   const time = params.time && /^([01]\d|2[0-3]):[0-5]\d$/.test(params.time) ? params.time : undefined;
 
   return (
@@ -63,6 +65,7 @@ export default async function NewStaffAppointmentPage({
           initialDate={date}
           initialTime={time}
           businessToday={today}
+          businessNow={businessNowLocal()}
         />
       )}
     </div>

@@ -15,11 +15,9 @@ import { QuickAddSheet } from "./QuickAddSheet";
 const SUPPRESSED = ["/appointments/new", "/my/appointments/new"];
 
 export function QuickAddFab({
-  businessToday,
   businessNow,
 }: {
-  businessToday: string;
-  /** Business-local "YYYY-MM-DDTHH:MM", for the past-datetime hint. */
+  /** Business-local "YYYY-MM-DDTHH:MM", for the past-appointment prompt. */
   businessNow: string;
 }) {
   const pathname = usePathname();
@@ -55,7 +53,6 @@ export function QuickAddFab({
 
       {open ? (
         <QuickAddSheet
-          businessToday={businessToday}
           businessNow={businessNow}
           onClose={() => setOpen(false)}
           onSuccess={(message) => setToast(message)}

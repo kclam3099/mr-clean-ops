@@ -9,11 +9,12 @@ import {
   type QuickAddStaffOption,
 } from "@/lib/appointments/quick-add-actions";
 import {
-  parseAppointmentMessage, flagPastDateTime, looksLikeAppointment,
+  parseAppointmentMessage, markPastDateTime, looksLikeAppointment, isPastDateTime,
   REQUIRED_FIELDS, type ParsedMessage, type ParsedField,
 } from "@/lib/appointments/message-parser";
 import { ItemsEditor, initialItemRow, type ItemRow } from "@/components/appointment-form/ItemsEditor";
 import { OverrideDialog } from "@/components/appointment-form/OverrideDialog";
+import { PastAppointmentDialog } from "@/components/appointment-form/PastAppointmentDialog";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { AppErrorCode, type AppError } from "@/lib/errors/appError";
 import { subtotal, formatMoney } from "@/lib/pricing/duration";
@@ -85,13 +86,11 @@ function detailsFromParsed(p: ParsedMessage): Details {
 }
 
 export function QuickAddSheet({
-  businessToday,
   businessNow,
   onClose,
   onSuccess,
 }: {
-  businessToday: string;
-  /** Business-local "YYYY-MM-DDTHH:MM", for the past-datetime hint. */
+  /** Business-local "YYYY-MM-DDTHH:MM", for the past-appointment prompt. */
   businessNow: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -108,6 +107,11 @@ export function QuickAddSheet({
   const [chosenStaff, setChosenStaff] = useState<QuickAddStaffOption | null>(null);
   const [workspaceOptions, setWorkspaceOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [overrideFor, setOverrideFor] = useState<AppError | null>(null);
+  // Set once the owner has explicitly confirmed a historical record. Kept for
+  // the rest of the sheet's life so a retry after an unavailable staff member
+  // does not ask again for the same appointment.
+  const [pastConfirmed, setPastConfirmed] = useState(false);
+  const [pastPromptFor, setPastPromptFor] = useState<QuickAddStaffOption | null | "staff">(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<Element | null>(null);
@@ -156,7 +160,10 @@ export function QuickAddSheet({
   /** Parse the pasted message and go straight to the review. */
   function detect(text: string) {
     setRawText(text);
-    const parsed = flagPastDateTime(parseAppointmentMessage(text), businessNow);
+    // A past datetime is valid data, so it is MARKED, never demoted to a
+    // confirmation state — a historical message must not be pushed into the
+    // correction form just for being historical.
+    const parsed = markPastDateTime(parseAppointmentMessage(text), businessNow);
     if (!looksLikeAppointment(parsed)) return;
     setDetails(detailsFromParsed(parsed));
     setConfirmations([...parsed.confirmationFields]);
@@ -191,9 +198,11 @@ export function QuickAddSheet({
     setStep("details");
   }
 
-  function payload(staffId: string | null, workspaceId?: string, overrideReason?: string) {
+  function payload(staffId: string | null, workspaceId?: string, overrideReason?: string,
+                   confirmPast?: boolean) {
     return {
       staffId,
+      ...(confirmPast ? { confirmPast: true } : {}),
       ...(workspaceId ? { workspaceId } : {}),
       customerName: details.customerName,
       customerPhone: details.customerPhone,
@@ -209,11 +218,25 @@ export function QuickAddSheet({
     };
   }
 
-  async function submit(staff: QuickAddStaffOption | null, workspaceId?: string, overrideReason?: string) {
+  const looksPast = () => isPastDateTime(details.apptDate, details.startTime, businessNow);
+
+  /** The staff tap, gated on confirming a historical record first. */
+  function attempt(staff: QuickAddStaffOption | null) {
+    setChosenStaff(staff);
+    if (looksPast() && !pastConfirmed) {
+      setPastPromptFor(staff ?? "staff");
+      return;
+    }
+    void submit(staff);
+  }
+
+  async function submit(staff: QuickAddStaffOption | null, workspaceId?: string, overrideReason?: string,
+                        confirmPastNow?: boolean) {
     setPending(true);
     setError(null);
     setFields({});
-    const result = await quickAddCreateAction(payload(staff?.id ?? null, workspaceId, overrideReason));
+    const result = await quickAddCreateAction(
+      payload(staff?.id ?? null, workspaceId, overrideReason, confirmPastNow ?? pastConfirmed));
     setPending(false);
 
     if (result.status === "success") {
@@ -233,6 +256,14 @@ export function QuickAddSheet({
       setFields(result.fields ?? {});
       setError(result.error);
       setStep("details");
+      return;
+    }
+
+    // The server is the authority on "past", so if it refuses for that reason —
+    // a stale clock, or the sheet left open across the appointment time — ask
+    // for the confirmation rather than showing a dead end.
+    if (result.error.code === AppErrorCode.PAST_DATETIME) {
+      setPastPromptFor(staff ?? "staff");
       return;
     }
 
@@ -256,7 +287,7 @@ export function QuickAddSheet({
         staff={context.staff}
         disabled={pending}
         pendingFor={pending ? chosenStaff?.id ?? null : null}
-        onPick={(s) => { setChosenStaff(s); void submit(s); }}
+        onPick={(s) => attempt(s)}
       />
     ) : null;
 
@@ -314,12 +345,13 @@ export function QuickAddSheet({
                   details={details}
                   total={total}
                   issues={issues}
+                  isPast={looksPast()}
                   onEdit={openEditor}
                   onBackToMessage={rawText ? () => setStep("paste") : undefined}
                   assign={assignList}
                   staffMode={isStaffMode}
                   saving={pending}
-                  onSave={() => void submit(null)}
+                  onSave={() => attempt(null)}
                 />
               ) : null}
 
@@ -330,7 +362,6 @@ export function QuickAddSheet({
                   fields={fields}
                   highlight={highlight}
                   disabled={pending}
-                  businessToday={businessToday}
                 />
               ) : null}
 
@@ -361,7 +392,7 @@ export function QuickAddSheet({
               type="button"
               disabled={pending || issues.length > 0}
               onClick={() => {
-                if (isStaffMode) { void submit(null); return; }
+                if (isStaffMode) { attempt(null); return; }
                 setError(null);
                 setStep(rawText ? "review" : "assign");
               }}
@@ -380,6 +411,21 @@ export function QuickAddSheet({
           </footer>
         ) : null}
       </div>
+
+      {pastPromptFor !== null ? (
+        <PastAppointmentDialog
+          date={details.apptDate}
+          time={details.startTime}
+          pending={pending}
+          onCancel={() => setPastPromptFor(null)}
+          onConfirm={() => {
+            const staff = pastPromptFor === "staff" ? null : pastPromptFor;
+            setPastPromptFor(null);
+            setPastConfirmed(true);
+            void submit(staff, undefined, undefined, true);
+          }}
+        />
+      ) : null}
 
       {overrideFor ? (
         <OverrideDialog
@@ -472,11 +518,12 @@ function PasteStep({
  * nothing new; the point of this flow is that it takes seconds.
  */
 function ReviewStep({
-  details, total, issues, onEdit, onBackToMessage, assign, staffMode, saving, onSave,
+  details, total, issues, isPast, onEdit, onBackToMessage, assign, staffMode, saving, onSave,
 }: {
   details: Details;
   total: number;
   issues: ParsedField[];
+  isPast: boolean;
   onEdit: () => void;
   onBackToMessage?: () => void;
   assign: React.ReactNode;
@@ -496,6 +543,15 @@ function ReviewStep({
           {details.apptDate ? longDate(details.apptDate) : "Date needed"}
           {details.startTime ? ` · ${friendlyTime(details.startTime)}` : ""}
         </p>
+        {/* Informational only. A historical job is recordable — it just asks
+            for one deliberate confirmation at the moment of saving. */}
+        {isPast ? (
+          <p data-past-badge
+             className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs
+                        font-medium text-amber-900">
+            Past appointment
+          </p>
+        ) : null}
         <p className="text-sm text-slate-600">{details.areaCity || "Area needed"}</p>
 
         <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3">
@@ -621,14 +677,13 @@ function Summary({ details, total, onEdit }: { details: Details; total: number; 
 }
 
 function DetailsStep({
-  details, setDetails, fields, highlight, disabled, businessToday,
+  details, setDetails, fields, highlight, disabled,
 }: {
   details: Details;
   setDetails: (d: Details) => void;
   fields: Record<string, string>;
   highlight: Set<string>;
   disabled: boolean;
-  businessToday: string;
 }) {
   const set = (patch: Partial<Details>) => setDetails({ ...details, ...patch });
   const cls = (name: string) =>
@@ -664,7 +719,8 @@ function DetailsStep({
 
       <div className="flex gap-3">
         <Field label="Date" htmlFor="qa-date" error={fields.apptDate} flagged={highlight.has("apptDate")}>
-          <input id="qa-date" name="apptDate" type="date" min={businessToday} className={cls("apptDate")}
+          {/* No `min`: a past date is recordable, confirmed at save time. */}
+          <input id="qa-date" name="apptDate" type="date" className={cls("apptDate")}
             disabled={disabled} value={details.apptDate}
             onChange={(e) => set({ apptDate: e.target.value })} />
         </Field>

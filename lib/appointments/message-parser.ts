@@ -46,6 +46,9 @@ export type ParsedMessage = {
   remarks: string;
   items: ParsedItem[];
   status: Record<ParsedField, FieldStatus>;
+  /** The appointment datetime is already behind the business clock. NOT an
+   *  error: historical jobs are recordable, they just need confirming. */
+  isPast: boolean;
   missingFields: ParsedField[];
   confirmationFields: ParsedField[];
   /** Summary lines deliberately kept out of the items, e.g. "Total RM379". */
@@ -203,6 +206,7 @@ export function parseAppointmentMessage(rawText: string): ParsedMessage {
       customerName: "MISSING", phone: "MISSING", address: "MISSING",
       areaCity: "MISSING", date: "MISSING", time: "MISSING", items: "MISSING",
     },
+    isPast: false,
     missingFields: [],
     confirmationFields: [],
     excludedLines,
@@ -248,28 +252,35 @@ export function parseAppointmentMessage(rawText: string): ParsedMessage {
 }
 
 /**
- * Flags an appointment that is already in the past.
+ * Marks an appointment that is already in the past.
+ *
+ * A past datetime is VALID appointment data — the owner records jobs after the
+ * fact. So this sets a flag and deliberately leaves the field statuses alone:
+ * a historical message must not be pushed into the correction form merely for
+ * being historical. The confirmation it needs is a single deliberate "record
+ * it anyway", not a round of re-typing.
  *
  * Separate from parsing, and takes the reference time as an argument, so the
  * parser stays pure and its tests never depend on when they run.
  *
  * The comparison is on the COMBINED date and time in the business timezone:
- * 8 Sep 2:00 PM is future at 11:00 the same morning, and must not be flagged
- * just because the date is today.
+ * 8 Sep 2:00 PM is future at 11:00 the same morning, and is not past just
+ * because the date is today.
  *
- * This is early feedback only — the 0007 database guard remains authoritative.
+ * This is early feedback only — create_appointment's own guard, and the
+ * p_confirm_past flag added in 0010, remain authoritative.
  *
  * @param nowLocal business-local "YYYY-MM-DDTHH:MM" (Asia/Kuala_Lumpur)
  */
-export function flagPastDateTime(parsed: ParsedMessage, nowLocal: string): ParsedMessage {
+export function markPastDateTime(parsed: ParsedMessage, nowLocal: string): ParsedMessage {
   if (parsed.status.date !== "FOUND" || parsed.status.time !== "FOUND") return parsed;
-  const appointment = `${parsed.date}T${parsed.time}`;
-  if (appointment > nowLocal) return parsed;
+  return { ...parsed, isPast: `${parsed.date}T${parsed.time}` <= nowLocal };
+}
 
-  return withDerivedLists({
-    ...parsed,
-    status: { ...parsed.status, date: "NEEDS_CONFIRMATION", time: "NEEDS_CONFIRMATION" },
-  });
+/** True when this local datetime is at or behind the business clock. */
+export function isPastDateTime(date: string, time: string, nowLocal: string): boolean {
+  if (!date || !time) return false;
+  return `${date}T${time}` <= nowLocal;
 }
 
 /** Business-local "YYYY-MM-DDTHH:MM", for `flagPastDateTime`. */

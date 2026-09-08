@@ -29,6 +29,10 @@ export type BookingInput = {
   items: Array<{ description: string; quantity: number; unitPrice: number }>;
   remarks: string | null;
   overrideReason: string | null;
+  /** Explicitly record a job that already happened. Fails closed: the RPC
+   *  refuses a past datetime unless this is true. It lifts ONLY the past
+   *  rule — every other validation still runs. */
+  confirmPast?: boolean;
 };
 
 export type BookingOutcome =
@@ -78,6 +82,9 @@ export async function bookAppointment(
     p_final_duration_override_min: null,
     p_remarks: input.remarks,
     p_large_job_override_reason: isMaster ? input.overrideReason : null,
+    // 0010. Sent as an explicit boolean so a missing value can never be read
+    // as consent; the database defaults it to false regardless.
+    p_confirm_past: input.confirmPast === true,
   });
 
   if (error) {

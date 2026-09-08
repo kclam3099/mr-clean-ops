@@ -59,6 +59,7 @@ export async function createAppointmentAction(
     items: input.items,
     remarks: input.remarks,
     overrideReason: input.overrideReason,
+    confirmPast: input.confirmPast,
   });
 
   if (outcome.status === "error") return outcome;
