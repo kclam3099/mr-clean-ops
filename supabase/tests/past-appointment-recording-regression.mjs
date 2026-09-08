@@ -30,9 +30,28 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     return rpc("create_appointment", token, args);
   };
   const track = (r) => { if (r.ok) fx.track(r.body); return r; };
-  const countOn = async (staffId, date) =>
-    (await fx.query(`select count(*)::int n from public.appointments where staff_id=$1 and appt_date=$2`,
-      [staffId, date]))[0].n;
+
+  /** Rows THIS suite created on a date. Counting every row would be a claim
+   *  about the whole database — real appointments on that date would read as a
+   *  security failure when nothing had leaked. */
+  const fixtureRowsOn = async (staffId, date) =>
+    (await fx.query(
+      `select count(*)::int n from public.appointments
+        where staff_id=$1 and appt_date=$2 and remarks=$3`, [staffId, date, fx.TAG]))[0].n;
+
+  /** The nearest PAST date on which `staffId` has nothing booked. The mirror of
+   *  fx.freeDate, which only scans forward. */
+  const pastFreeDate = async (staffId, startOffset = 1) => {
+    for (let k = startOffset; k < startOffset + 400; k++) {
+      const candidate = await scalar(
+        `to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date - $1::int),'YYYY-MM-DD')`, [k]);
+      const [{ n }] = await fx.query(
+        `select count(*)::int n from public.appointments
+          where staff_id=$1 and appt_date=$2 and status='booked'`, [staffId, candidate]);
+      if (n === 0) return candidate;
+    }
+    throw new Error("no free past date available");
+  };
 
   rec.check({
     id: "PR-00 business clock", actor: "db", setup: "-",
@@ -53,7 +72,9 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     actual: r1.ok ? "created" : r1.msg, ok: r1.ok,
   });
 
-  const yesterday = await day(-1);
+  // A past date Jack is actually free on, so these checks cannot fail on an
+  // overlap with a real appointment.
+  const yesterday = await pastFreeDate(jack, 1);
   const r2 = track(await create(yesterday, "10:00"));
   rec.check({
     id: "PR-02 past create without confirmation DENIED (CRITICAL)", actor: "KC", setup: "-",
@@ -66,8 +87,8 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     id: "PR-03 the refused past create left no row (CRITICAL)", actor: "KC", setup: "-",
     action: "count appointments on that date",
     expected: "0",
-    actual: `${await countOn(jack, yesterday)} row(s)`,
-    ok: (await countOn(jack, yesterday)) === 0, security: true,
+    actual: `${await fixtureRowsOn(jack, yesterday)} fixture row(s)`,
+    ok: (await fixtureRowsOn(jack, yesterday)) === 0, security: true,
   });
 
   const r4 = track(await create(yesterday, "10:00", { confirmPast: true }));
@@ -119,8 +140,18 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     // asserts. To test the PAST rule alone, use a time earlier today that is
     // inside the window.
     const nowMinutesForEarlier = Number(nowMyt.slice(11, 13)) * 60 + Number(nowMyt.slice(14, 16));
-    if (nowMinutesForEarlier > 10 * 60) {
-      const earlierConfirmed = track(await create(today, "09:30", { confirmPast: true, staff: dyron }));
+    // Someone with nothing booked today, so a real appointment cannot make this
+    // fail on an overlap rather than on the rule it tests.
+    const [freeToday] = await fx.query(
+      `select s.id from public.staff s
+        where s.is_active
+          and not exists (select 1 from public.appointments a
+                           where a.staff_id = s.id and a.status = 'booked'
+                             and a.appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date)
+        limit 1`);
+    if (nowMinutesForEarlier > 10 * 60 && freeToday) {
+      const earlierConfirmed = track(await create(today, "09:30", { confirmPast: true, staff: freeToday.id,
+        ws: freeToday.id === victor ? privateWs : shared }));
       rec.check({
         id: "PR-08 earlier today IS recordable when confirmed", actor: "KC",
         setup: `it is ${nowMyt} MYT, and 09:30 is inside working hours`,
@@ -131,7 +162,9 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     } else {
       rec.skip({
         id: "PR-08 earlier today IS recordable when confirmed", actor: "KC",
-        reason: `it is ${nowMyt} MYT — no past time today falls inside working hours yet`,
+        reason: !freeToday
+          ? "every staff member already has an appointment today, so an overlap would mask the rule"
+          : `it is ${nowMyt} MYT — no past time today falls inside working hours yet`,
       });
     }
 
@@ -177,7 +210,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
 
   {
     // Working hours: give Dyron a narrow window on the weekday of a past date.
-    const pastDate = await day(-8);
+    const pastDate = await pastFreeDate(dyron, 8);
     const dow = await scalar(`extract(dow from $1::date)::int`, [pastDate]);
     fx.trackWorkingHours(dyron, dow);
     await db.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [dyron, dow]);
@@ -207,7 +240,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
 
   {
     // Time off.
-    const offDate = await day(-15);
+    const offDate = await pastFreeDate(jack, 15);
     const off = await rpc("set_staff_time_off", T.kc, {
       p_staff_id: jack, p_off_date: offDate, p_start_time: null, p_end_time: null,
       p_reason: "REGRESSION: historical time off",
@@ -239,7 +272,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     const bigDate = await fx.freeDate(dyron, { offsetDays: 620 });
     const past = await scalar(`to_char(($1::date - 400),'YYYY-MM-DD')`, [bigDate]);
     void past;
-    const largeDate = await day(-22);
+    const largeDate = await pastFreeDate(victor, 22);
     const first = track(await create(largeDate, "10:00", { confirmPast: true, staff: victor, ws: privateWs, amount: 800 }));
     rec.check({
       id: "PR-14 a historical large job is still classified", actor: "KC",
@@ -268,7 +301,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
   // D. Authorization is untouched
   // ==========================================================================
   {
-    const pastDate = await day(-30);
+    const pastDate = await pastFreeDate(victor, 30);
     const forged = await rpc("create_appointment", T.nick, {
       ...bookingArgs({ ws: privateWs, staff: victor, date: pastDate, time: "10:00", amount: 200, remarks: fx.TAG }),
       p_confirm_past: true,
@@ -285,8 +318,8 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
       setup: "p_confirm_past = true, Victor's real id and the private workspace",
       action: "attempt a historical record",
       expected: "REJECT, and no row",
-      actual: `${forged.ok ? "CREATED" : forged.msg} · ${await countOn(victor, pastDate)} row(s)`,
-      ok: !forged.ok && (await countOn(victor, pastDate)) === 0, security: true,
+      actual: `${forged.ok ? "CREATED" : forged.msg} · ${await fixtureRowsOn(victor, pastDate)} fixture row(s)`,
+      ok: !forged.ok && (await fixtureRowsOn(victor, pastDate)) === 0, security: true,
     });
     rec.check({
       id: "PR-17 forged Victor and a random uuid stay indistinguishable (CRITICAL)", actor: "NICK",
@@ -300,7 +333,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
 
   {
     // Staff record history for themselves only, and never for someone else.
-    const pastDate = await day(-31);
+    const pastDate = await pastFreeDate(jack, 31);
     const own = await rpc("create_appointment", T.jack, {
       p_workspace_id: shared, p_staff_id: null, ...SYNTHETIC_CUSTOMER,
       p_appt_date: pastDate, p_start_time: "10:00", p_items: items(200),
@@ -317,7 +350,7 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     });
 
     const forOther = await rpc("create_appointment", T.jack, {
-      ...bookingArgs({ ws: shared, staff: dyron, date: await day(-32), time: "10:00", amount: 200, remarks: fx.TAG }),
+      ...bookingArgs({ ws: shared, staff: dyron, date: await pastFreeDate(dyron, 32), time: "10:00", amount: 200, remarks: fx.TAG }),
       p_confirm_past: true,
     });
     if (forOther.ok) fx.track(forOther.body);

@@ -33,10 +33,23 @@ try {
 
   const day = async (n) => (await fx.query(
     `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
-  // The nearest day Jack is genuinely free, rather than a flat "tomorrow": a
-  // real appointment sitting in tomorrow's 10:00 slot made this whole suite
-  // fail on a PHYSICAL_OVERLAP that had nothing to do with what it tests.
-  const tomorrow = await fx.freeDate(ids.staff.jack, { offsetDays: 1 });
+  // The nearest day on which EVERY staff member this suite books is free.
+  // A flat "tomorrow" collided with real appointments; so did a date free for
+  // Jack alone, because the same date is later used to book Victor and Dyron.
+  // The date has to be free for all of them or the suite fails on a
+  // PHYSICAL_OVERLAP that has nothing to do with what it tests.
+  const tomorrow = await (async () => {
+    for (let offset = 1; offset < 400; offset++) {
+      const candidate = await day(offset);
+      const [{ n }] = await fx.query(
+        `select count(*)::int n from public.appointments
+          where appt_date = $1 and status = 'booked'
+            and staff_id = any($2::uuid[])`,
+        [candidate, [ids.staff.jack, ids.staff.dyron, ids.staff.victor]]);
+      if (n === 0) return candidate;
+    }
+    throw new Error("no date found where Jack, Dyron and Victor are all free");
+  })();
 
   // =========================================================================
   // 1. KC — Shared Team for Jack, then KC Private Team for Victor

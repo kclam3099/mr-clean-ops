@@ -12,19 +12,30 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
  * point, because any of those would disclose that another workspace exists.
  *
  * "All Operations" is a virtual merged view, not a workspace id.
+ *
+ * THE DISPLAYED VALUE COMES FROM THE URL, not from a prop. A layout cannot read
+ * its children's search params, so the server had to render this selector from
+ * the caller's DEFAULT scope — which meant it kept saying "All Operations"
+ * while the page below it was correctly scoped to one workspace and said so in
+ * its heading. Reading the same `?ws=` the page reads makes the two agree by
+ * construction.
+ *
+ * An unrecognised value falls back to "all", mirroring `resolveScope` on the
+ * server: a rejected workspace must not stay selected in the control either.
  */
 export function WorkspaceScopeSelector({
   options,
-  value,
 }: {
   options: Array<{ value: string; label: string }>;
-  value: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   if (options.length < 2) return null;
+
+  const requested = searchParams.get("ws");
+  const value = options.some((o) => o.value === requested) ? (requested as string) : "all";
 
   function onChange(next: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -36,6 +47,7 @@ export function WorkspaceScopeSelector({
     <label className="flex items-center gap-2">
       <span className="sr-only">Workspace</span>
       <select
+        data-scope-selector
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm

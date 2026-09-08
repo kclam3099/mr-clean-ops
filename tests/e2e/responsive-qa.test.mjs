@@ -221,8 +221,18 @@ try {
              where a.staff_id = s.id and a.status = 'booked'
                and a.appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date)
         order by p.full_name limit 1`);
-    if (!idle) throw new Error("every TEST_ staff has an appointment today; cannot check the empty state");
-    const idleEmail = `${idle.full_name.toLowerCase().replace("_", "-")}@mrcleanclean.dev.test`;
+    // Skip rather than throw. Manual use of the app can legitimately leave every
+    // staff member busy today, and a throw here abandoned every later check —
+    // the same trap as the earlier "0 PASS / 0 FAIL" crash.
+    if (!idle) {
+      rec.skip({
+        id: "QA-empty state says something useful", actor: "harness",
+        reason: "every TEST_ staff has an appointment today, so there is no empty agenda to check",
+      });
+    }
+    const idleEmail = idle
+      ? `${idle.full_name.toLowerCase().replace("_", "-")}@mrcleanclean.dev.test` : null;
+    if (idleEmail) {
 
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
@@ -239,89 +249,12 @@ try {
       ok: /nothing scheduled/i.test(text),
     });
     await ctx.close();
-  }
-
-  // =========================================================================
-  // Dashboard card consistency
-  // =========================================================================
-  // Today and Tomorrow used to reach their cards by different routes — Today
-  // through a grid of per-staff columns, Tomorrow through a single stacked list
-  // — so one appointment rendered at a third of the width and the other at full
-  // width. They now share one grid, and a card is a card wherever it sits.
-  {
-    const today = (await fx.query(
-      `select to_char((now() at time zone 'Asia/Kuala_Lumpur')::date,'YYYY-MM-DD') d`))[0].d;
-    const tomorrow = (await fx.query(
-      `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + 1),'YYYY-MM-DD') d`))[0].d;
-
-    // Today's job is recorded as history if the hour has already passed, which
-    // is exactly what 0010 makes possible.
-    const todayJob = await rpc("create_appointment", kcToken, {
-      ...bookingArgs({ ws: ids.ws.shared, staff: ids.staff.dyron, date: today, time: "10:00",
-        amount: 200, remarks: fx.TAG,
-        customer: { p_customer_name: "TEST CUSTOMER QA TODAY", p_customer_phone: "+60123456789",
-          p_address_line: "1 Jalan Test", p_area_city: "Kepong" } }),
-      p_confirm_past: true,
-    });
-    if (todayJob.ok) fx.track(todayJob.body);
-    const tomorrowJob = await rpc("create_appointment", kcToken, bookingArgs({
-      ws: ids.ws.shared, staff: ids.staff.dyron, date: tomorrow, time: "13:00", amount: 200,
-      remarks: fx.TAG,
-      customer: { p_customer_name: "TEST CUSTOMER QA TOMORROW", p_customer_phone: "+60123456789",
-        p_address_line: "2 Jalan Test", p_area_city: "Kepong" } }));
-    if (tomorrowJob.ok) fx.track(tomorrowJob.body);
-
-    rec.check({
-      id: "DASHQA-00 one Today and one Tomorrow appointment exist", actor: "KC", setup: "-",
-      action: "seed the two cards to compare",
-      expected: "both created",
-      actual: `today=${todayJob.ok ? "ok" : todayJob.msg} tomorrow=${tomorrowJob.ok ? "ok" : tomorrowJob.msg}`,
-      ok: todayJob.ok && tomorrowJob.ok,
-    });
-
-    if (todayJob.ok && tomorrowJob.ok) {
-      for (const width of [390, 768, 850, 1440]) {
-        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
-        const page = await ctx.newPage();
-        await login(page, ids.email.kc);
-        await gotoStable(page, `${BASE}/dashboard`);
-        await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 })
-          .catch(() => {});
-        await page.waitForTimeout(700);
-
-        const m = await page.evaluate(() => {
-          const cardOf = (name) => {
-            const card = [...document.querySelectorAll("article")]
-              .find((a) => a.innerText.includes(name));
-            return card ? Math.round(card.getBoundingClientRect().width) : null;
-          };
-          const doc = document.documentElement;
-          return {
-            todayW: cardOf("TEST CUSTOMER QA TODAY"),
-            tomorrowW: cardOf("TEST CUSTOMER QA TOMORROW"),
-            overflow: doc.scrollWidth - doc.clientWidth,
-          };
-        });
-
-        rec.check({
-          id: `DASHQA-01 ${width}px Today and Tomorrow cards match`, actor: "KC",
-          setup: `${width}px viewport`,
-          action: "measure both appointment cards",
-          expected: "identical widths",
-          actual: `today=${m.todayW} tomorrow=${m.tomorrowW}`,
-          ok: m.todayW !== null && m.todayW === m.tomorrowW,
-        });
-
-        rec.check({
-          id: `DASHQA-02 ${width}px dashboard does not scroll sideways`, actor: "KC",
-          setup: `${width}px viewport`, action: "measure horizontal overflow",
-          expected: "none",
-          actual: m.overflow > 0 ? `${m.overflow}px` : "none", ok: m.overflow <= 0,
-        });
-        await ctx.close();
-      }
     }
   }
+
+  // The dashboard card-parity checks that lived here are gone with the cards.
+  // /dashboard now renders compact rows, and their density and responsiveness
+  // are measured at four widths in tests/e2e/dashboard-scope.test.mjs.
 
 } finally {
   const summary = rec.summary();

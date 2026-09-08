@@ -14,6 +14,7 @@
     "test:e2e:qa": "node tests/e2e/responsive-qa.test.mjs",
     "test:e2e:quickadd": "node tests/e2e/quick-add.test.mjs",
     "test:e2e:f5": "node tests/e2e/calendar-availability.test.mjs",
+    "test:e2e:dashboard": "node tests/e2e/dashboard-scope.test.mjs",
     "test:availability": "node supabase/tests/availability-finder-regression.mjs",
     "test:past-guard": "node supabase/tests/past-guard-and-config-regression.mjs",
     "test:past-recording": "node supabase/tests/past-appointment-recording-regression.mjs",

@@ -273,15 +273,15 @@ try {
 
     rec.check({
       id: "DASH-01 KC's dashboard counts the private appointment", actor: "TEST_KC",
-      setup: "a private appointment exists today alongside a shared one",
-      action: "read the Today count and total",
+      setup: "a private appointment exists this week alongside a shared one",
+      action: "read the This week count and total",
       expected: "includes both",
       actual: kcStats, ok: kcStats.length > 0,
     });
     rec.check({
       id: "DASH-02 Nick's totals exclude the hidden row (CRITICAL)", actor: "TEST_NICK",
       setup: "same day, same dashboard",
-      action: "compare Nick's Today figures against KC's",
+      action: "compare Nick's This week figures against KC's",
       expected: "different — a shared aggregate would disclose the hidden job's value",
       actual: `KC="${kcStats}" NICK="${nickStats}"`,
       ok: kcStats !== nickStats, security: true,
@@ -312,11 +312,18 @@ try {
 // ---------------------------------------------------------------------------
 
 /** The Today stat card's number and total, as a comparable string. */
+/**
+ * The dashboard's week summary — "N appointments · RM… · N large jobs".
+ *
+ * This used to read a "TODAY" stat card, which the two-week redesign removed.
+ * The check below is the aggregate-leak guard, so it has to follow the numbers
+ * wherever they live rather than quietly return "" and compare two blanks.
+ */
 async function readStats(page) {
   return page.evaluate(() => {
-    const card = [...document.querySelectorAll("div")]
-      .find((d) => /^TODAY/i.test(d.innerText.trim()));
-    return card ? card.innerText.replace(/\s+/g, " ").trim() : "";
+    const match = (document.body.innerText || "")
+      .match(/\d+\s+appointments?\s+·\s+RM[\d,.]+(\s+·\s+\d+\s+large jobs?)?/);
+    return match ? match[0].replace(/\s+/g, " ").trim() : "";
   });
 }
 

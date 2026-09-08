@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import type { SessionContext } from "@/lib/auth/session";
-import { scopeOptions, scopedHref, type WorkspaceScope } from "@/lib/workspace/scope";
+import { scopeOptions, type WorkspaceScope } from "@/lib/workspace/scope";
 import { WorkspaceScopeSelector } from "./WorkspaceScopeSelector";
 import { SignOutButton } from "./SignOutButton";
-import { NavLink } from "./NavLink";
+import { ScopedNavLinks } from "./ScopedNavLinks";
 
 /**
  * Master navigation. Every item is derived from what the caller can actually
@@ -22,14 +22,15 @@ export function MasterNav({
 }) {
   const options = scopeOptions(session);
   const hasChoice = options.length >= 2;
-  const current = scope.kind === "all" ? "all" : scope.workspaceId;
 
   const links = [
     { path: "/dashboard", label: "Today", scoped: true },
     { path: "/calendar", label: "Calendar", scoped: true },
     { path: "/appointments", label: "Appointments", scoped: true },
     { path: "/staff", label: "Staff", scoped: true },
-    { path: "/availability", label: "Availability", scoped: true },
+    // /availability resolves its own operational workspace server-side and
+    // reads no ws parameter, so scoping its link would be misleading.
+    { path: "/availability", label: "Availability", scoped: false },
     { path: "/reports/monthly", label: "Reports", scoped: true },
     ...(session.isSuperMaster ? [{ path: "/settings", label: "Settings", scoped: false }] : []),
   ];
@@ -43,7 +44,7 @@ export function MasterNav({
 
         {hasChoice ? (
           <Suspense fallback={null}>
-            <WorkspaceScopeSelector options={options} value={current} />
+            <WorkspaceScopeSelector options={options} />
           </Suspense>
         ) : (
           // One workspace: name it plainly, as a label rather than a control.
@@ -52,15 +53,9 @@ export function MasterNav({
           </span>
         )}
 
-        <nav className="flex flex-wrap items-center gap-1">
-          {links.map((l) => (
-            <NavLink
-              key={l.path}
-              href={l.scoped ? scopedHref(l.path, scope, hasChoice) : l.path}
-              label={l.label}
-            />
-          ))}
-        </nav>
+        <Suspense fallback={null}>
+          <ScopedNavLinks links={links} options={options} hasChoice={hasChoice} />
+        </Suspense>
 
         <div className="ml-auto flex items-center gap-3">
           <span className="hidden text-sm text-slate-500 sm:inline">{session.fullName}</span>
