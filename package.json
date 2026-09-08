@@ -16,6 +16,7 @@
     "test:e2e:f5": "node tests/e2e/calendar-availability.test.mjs",
     "test:availability": "node supabase/tests/availability-finder-regression.mjs",
     "test:past-guard": "node supabase/tests/past-guard-and-config-regression.mjs",
+    "test:past-recording": "node supabase/tests/past-appointment-recording-regression.mjs",
     "test:working-hours": "node supabase/tests/working-hours-boundary-regression.mjs",
     "test:error-mapping": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON supabase/tests/error-mapping-coverage-regression.mjs",
     "test:regression": "node supabase/tests/run-all.mjs",

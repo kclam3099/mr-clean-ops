@@ -17,6 +17,7 @@ const SUITES = [
   ['availability-finder-regression', 'Availability finder (0006 + 0007)'],
   ['past-guard-and-config-regression', 'Past-datetime guard + booking config (0007)'],
   ['working-hours-boundary-regression', 'Working-hours midnight boundary (0008)'],
+  ['past-appointment-recording-regression', 'Past appointment recording (0010)'],
   ['error-mapping-coverage-regression', 'Privacy-safe error mapping coverage'],
 ];
 

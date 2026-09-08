@@ -98,11 +98,16 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
     });
   }
 
-  const tomorrow = await day(1);
-  const r4 = track(await create(tomorrow, "10:00"));
+  // The nearest future date on which Jack is actually free, rather than a flat
+  // "tomorrow". This check is about the past guard letting a FUTURE booking
+  // through; a real appointment sitting in tomorrow's 10:00 slot made it fail
+  // for a PHYSICAL_OVERLAP that has nothing to do with what it tests.
+  const nearFuture = await fx.freeDate(jack, { offsetDays: 1 });
+  const r4 = track(await create(nearFuture, "10:00"));
   rec.check({
-    id: "PG-04 tomorrow ALLOWED", actor: "KC", setup: "-",
-    action: `create on ${tomorrow} 10:00`, expected: "ALLOWED",
+    id: "PG-04 a near-future date is ALLOWED", actor: "KC",
+    setup: "the next day Jack has nothing booked",
+    action: `create on ${nearFuture} 10:00`, expected: "ALLOWED",
     actual: r4.ok ? "created" : r4.msg, ok: r4.ok,
   });
 
@@ -135,7 +140,7 @@ const summary = await runSuite("PAST-GUARD + BOOKING CONFIG REGRESSION", async (
   // ==========================================================================
   // B. reschedule_appointment
   // ==========================================================================
-  const future = await day(20);
+  const future = await fx.freeDate(jack, { offsetDays: 20 });
   const seed = track(await create(future, "10:00"));
   const apptId = seed.ok ? seed.body : null;
   rec.check({
