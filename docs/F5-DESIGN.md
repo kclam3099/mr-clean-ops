@@ -1,9 +1,13 @@
 # F5 — Calendar Operations, Availability UX & Quick Add
 
-Approved design. Locked decisions are marked **LOCKED** and must not be
-revisited during implementation without a new approval.
+**STATUS: DELIVERED AND LOCKED.** This is now the record of what was built,
+not a proposal. Locked decisions are marked **LOCKED** and must not be
+revisited without a new approval.
 
-Feature ledger this phase follows on from:
+Delivered in `01b9271`, `d642a10`, `5527e56` and `1de0d1c`, on top of this
+design at `1d931c6`.
+
+Feature ledger:
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -11,11 +15,21 @@ Feature ledger this phase follows on from:
 | F2 | Add Appointment | DONE |
 | F3 | Appointment detail / lifecycle | DONE |
 | F4 | Operational dashboard | DONE |
-| **F5** | **Calendar operations / availability UX / Quick Add** | this document |
+| F5 | Calendar operations / availability UX / Quick Add | **DONE** |
 
-Migrations `0001–0009` are locked. F5 adds none. If implementation proves a
-genuine backend defect, stop the dependent path and report before changing any
-scheduling or privacy semantics.
+Migrations `0001–0009` are locked. **F5 added none and edited none** — the
+whole implementation range touches no file under `supabase/migrations/`.
+
+### Accepted V1 deviation
+
+`?new=<id>` highlighting is wired through the calendar — `StaffWeekGrid` and
+`CalendarDayView` accept `highlightId`, and the page parses the parameter — but
+nothing sets it. Quick Add finishes with `router.refresh()` and an
+"Assigned to …" toast, which is sufficient for V1.
+
+The unused plumbing is harmless and is deliberately left in place: introducing
+navigation and history handling for a cosmetic highlight is not worth the
+complexity. Decided explicitly, not overlooked.
 
 ---
 
