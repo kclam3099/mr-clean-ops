@@ -638,3 +638,88 @@ Not defects; recorded so they are not rediscovered as surprises.
    `Multiple active workspace memberships` when no workspace is passed.
    Unreachable today, and both booking forms always pass one. Worth a
    regression test so a future Settings change surfaces it loudly.
+
+---
+
+## Locked: past recording, customer availability message, dashboard parity
+
+Three product changes, approved and locked.
+
+| Change | Status |
+| --- | --- |
+| **0010** — past appointment confirmation | **DONE** (`9471389`, `9507434`) |
+| **Customer-facing availability message** | **DONE** (`50bb1ad`) |
+| **Dashboard Today/Tomorrow card parity** | **DONE** (`50bb1ad`) |
+
+### Past appointment recording (0010)
+
+`create_appointment` takes `p_confirm_past`. Absent, `false` and `null` all
+refuse, so the flag fails closed. It lifts the past rule and nothing else:
+authorization, RLS, membership, staff identity, overlap, working hours, time
+off, large-job rules, duration, buffer and concurrency all still run, because
+`assert_appointment_slot_available` carries no past guard of its own.
+
+`reschedule_appointment` is unchanged — back-dating an existing appointment
+stays refused, including when a `p_confirm_past` key is smuggled into the call.
+
+Dropped and recreated rather than overloaded: `CREATE OR REPLACE` cannot change
+a parameter list, and two signatures would force PostgREST to disambiguate on
+whichever JSON keys arrive.
+
+A past datetime is MARKED in the parser, never demoted to a confirmation state,
+so a historical WhatsApp message is not pushed into the correction form merely
+for being historical.
+
+### Customer availability message
+
+`/availability` produces the exact WhatsApp text to paste, with one Copy
+button. Union across the operational staff, deduplicated, days with nothing
+available omitted entirely. The message carries only a heading, weekdays and
+times — no staff name, workspace, count, or reason a time is missing. The staff
+dimension is collapsed server-side, so no staff id reaches the browser.
+
+The operational team is resolved by workspace **slug**, since `workspaces` has
+no `is_private` / `is_customer_facing` column. A V1 convention worth replacing
+with a real column when Settings lands.
+
+### Dashboard card parity
+
+Today and Tomorrow share one `AppointmentGrid`; grouping happens outside the
+card layout, so a staff heading cannot change card width. Measured identical at
+390 / 768 / 850 / 1440px.
+
+---
+
+## Automated check counts
+
+Read from the latest full test output, not inferred.
+
+**Backend regression: 233 / 233** (0 failures, 0 skipped), across 8 suites:
+
+| Suite | Checks |
+| --- | --- |
+| Security / identity isolation | 42 |
+| Appointment engine scheduling rules | 46 |
+| Cross-workspace privacy | 23 |
+| Availability finder (0006 + 0007) | 30 |
+| Past-datetime guard + booking config (0007) | 23 |
+| Working-hours midnight boundary (0008) | 23 |
+| **Past appointment recording (0010)** | **29** |
+| Privacy-safe error mapping coverage | 17 |
+
+**Full automated total: 572** (was 516).
+
+| Suite | Checks |
+| --- | --- |
+| Backend regression | 233 |
+| F2 add appointment | 46 |
+| F3 detail + lifecycle | 44 |
+| Quick Add (V2) | 39 |
+| F5 calendar + availability | 43 |
+| Cross-user browser privacy | 24 |
+| Responsive / UX QA | 74 |
+| Unit | 69 |
+
+Lint clean, build passes, secret scan clean across the working tree and all Git
+history. DEV baseline clean. Migrations 0001–0010 applied; 0001–0009 untouched
+by this changeset.
