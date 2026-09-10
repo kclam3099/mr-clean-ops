@@ -395,7 +395,7 @@ const summary = await runSuite('APPOINTMENT ENGINE REGRESSION', async ({ ids, fx
      order by future_n, s.display_name, d.dow`, [shared]);
   const pick = candidates.find(c => c.future_n === 0);
   const S = pick.id, DOW = pick.dow;
-  fx.trackWorkingHours(S, DOW);
+  await fx.rememberWorkingHours(S, DOW);
 
   // A PAST booking on the same weekday must never block a recurring-hours
   // change (the 0004 fix). Inserted directly: the engine has no past-date path.
@@ -453,7 +453,9 @@ const summary = await runSuite('APPOINTMENT ENGINE REGRESSION', async ({ ids, fx
   // to one weekday, and a later section booking the same staff member on that
   // weekday would otherwise be rejected for being outside it — which would
   // silently invalidate that section instead of failing loudly.
-  await fx.query(`delete from public.staff_working_hours where staff_id = $1 and day_of_week = $2`, [S, DOW]);
+  // Restores whatever was there before, rather than deleting by
+  // (staff_id, day_of_week) and leaving a hole where a real window used to be.
+  await fx.clearWorkingHours(S, DOW);
 
   // ==========================================================================
   // K. Genuine concurrent double-booking

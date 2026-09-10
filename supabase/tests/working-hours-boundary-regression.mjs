@@ -29,35 +29,28 @@ const summary = await runSuite("WORKING-HOURS BOUNDARY REGRESSION", async ({ ids
   const shared = ids.ws.shared;
   const { dyron, jack } = ids.staff;
 
-  // Dates here are fixed offsets rather than freeDate() results, because the
-  // cases are weekday-sensitive: `d` and `d + 7` must land on the same day of
-  // the week for a single working-hours window to govern both. That safety
-  // depends on the slot being empty, so assert it instead of hoping — this
-  // suite books only Dyron and Jack, so checking both covers every call site.
-  const day = async (n) => {
-    const d = (await fx.query(
-      `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
-    await fx.requireFree(dyron, d, `working-hours day(${n}) / Dyron`);
-    await fx.requireFree(jack, d, `working-hours day(${n}) / Jack`);
-    return d;
-  };
+  // Every case sets its own window on its own date's weekday, so the dates do
+  // not need to share a weekday — they only need to be free. Searching forward
+  // for a date on which BOTH staff members this suite books are free means a
+  // manual appointment can never turn a boundary test into a PHYSICAL_OVERLAP,
+  // and nothing has to throw and abandon the remaining checks.
+  const day = (n) => fx.freeDateForAll([dyron, jack], { offsetDays: n });
   const dowOf = async (date) => (await fx.query(`select extract(dow from $1::date)::int d`, [date]))[0].d;
 
+  // Both helpers go through the fixture tracker, which remembers the exact row
+  // it displaces and puts it back at teardown. Deleting by
+  // (staff_id, day_of_week) destroyed a manually configured window instead of
+  // borrowing it.
   /** Remove any staff-specific window on that weekday, so company defaults apply. */
   async function clearWindow(staff, date) {
     const dow = await dowOf(date);
-    fx.trackWorkingHours(staff, dow);
-    await fx.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [staff, dow]);
+    await fx.clearWorkingHours(staff, dow);
   }
 
-  /** Give `staff` the late window on the weekday of `date`, tracked for teardown. */
+  /** Give `staff` the late window on the weekday of `date`, restored at teardown. */
   async function applyLateWindow(staff, date) {
     const dow = await dowOf(date);
-    fx.trackWorkingHours(staff, dow);
-    await fx.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [staff, dow]);
-    await fx.query(
-      `insert into public.staff_working_hours (staff_id, day_of_week, start_time, end_time)
-       values ($1,$2,$3::time,$4::time)`, [staff, dow, LATE_WINDOW.start, LATE_WINDOW.end]);
+    await fx.setWorkingHours(staff, dow, LATE_WINDOW.start, LATE_WINDOW.end);
     return dow;
   }
 
@@ -214,8 +207,7 @@ const summary = await runSuite("WORKING-HOURS BOUNDARY REGRESSION", async ({ ids
   {
     const d = await day(140);
     const dow = await dowOf(d);
-    fx.trackWorkingHours(jack, dow);
-    await fx.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [jack, dow]);
+    await fx.clearWorkingHours(jack, dow);
 
     // A pre-existing future row that runs past midnight. Inserted as an admin
     // fixture precisely because the engine now refuses to create one — this

@@ -39,6 +39,8 @@ try {
   await assertAppIsUp();
   browser = await chromium.launch();
 
+  await fx.watchAppointments(`customer_name like 'TEST CUSTOMER DASH%'`, []);
+
   const scalar = async (sql, params = []) => (await fx.query(sql, params))[0].v;
   const today = await scalar(
     `select to_char((now() at time zone 'Asia/Kuala_Lumpur')::date,'YYYY-MM-DD') v`);
@@ -356,13 +358,13 @@ try {
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
-  // Only what this suite created — manual DEV appointments are left alone.
-  await db.query(`delete from public.appointment_items where appointment_id in
-    (select id from public.appointments where customer_name like 'TEST CUSTOMER DASH%')`);
-  await db.query(`delete from public.audit_logs where entity_id in
-    (select id from public.appointments where customer_name like 'TEST CUSTOMER DASH%')`);
-  await db.query(`delete from public.appointments where customer_name like 'TEST CUSTOMER DASH%'`);
-  await fx.cleanup();
+  // Take ownership of rows that APPEARED while this suite ran, then delete by
+  // exact id. A manual booking matching the same pattern existed at baseline
+  // and is therefore never adopted, never touched.
+  const adopted = await fx.adoptNew();
+  const removed = await fx.cleanup();
+  console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
+    + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
   process.exitCode = summary.fail === 0 ? 0 : 1;
 }

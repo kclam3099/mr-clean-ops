@@ -30,6 +30,8 @@ const rec = createRecorder("F3 APPOINTMENT DETAIL (browser)");
 let browser;
 try {
   await assertAppIsUp();
+  await fx.watchAppointments(
+    `customer_name like 'TEST %F3%' or remarks = $1`, [fx.TAG]);
   browser = await chromium.launch();
 
   const day = async (n) => (await fx.query(
@@ -635,21 +637,16 @@ try {
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
-  await db.query(`delete from public.appointment_items where appointment_id in
-    (select id from public.appointments where customer_name like 'TEST %F3%' or remarks = $1)`, [fx.TAG]);
-  await db.query(`delete from public.appointment_rule_overrides where subject_appointment_id in
-    (select id from public.appointments where customer_name like 'TEST %F3%' or remarks = $1)`, [fx.TAG]);
-  await db.query(`delete from public.audit_logs where entity_id in
-    (select id from public.appointments where customer_name like 'TEST %F3%' or remarks = $1)`, [fx.TAG]);
-  const removed = await db.query(
-    `delete from public.appointments where customer_name like 'TEST %F3%' or remarks = $1 returning id`, [fx.TAG]);
-  await fx.cleanup();
-  console.log(`fixture cleanup: ${removed.rowCount} F3 appointments removed`);
+  // Take ownership of rows that APPEARED while this suite ran, then delete by
+  // exact id. A manual booking matching the same pattern existed at baseline
+  // and is therefore never adopted, never touched.
+  const adopted = await fx.adoptNew();
+  const removed = await fx.cleanup();
+  console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
+    + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
   process.exitCode = summary.fail === 0 ? 0 : 1;
 }
-
-// ---------------------------------------------------------------------------
 
 async function assertAppIsUp() {
   try {

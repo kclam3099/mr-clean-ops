@@ -12,15 +12,13 @@
 
 import { runSuite, rpc, bookingArgs, items, SYNTHETIC_CUSTOMER } from "./lib/harness.mjs";
 
-const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids, fx, rec, T, db }) => {
+const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids, fx, rec, T }) => {
   const { shared, private: privateWs } = ids.ws;
   const { jack, dyron, victor } = ids.staff;
 
   const scalar = async (expr, params = []) => (await fx.query(`select ${expr} v`, params))[0].v;
   const nowMyt = await scalar(`to_char((now() at time zone 'Asia/Kuala_Lumpur'),'YYYY-MM-DD HH24:MI')`);
   const today = nowMyt.slice(0, 10);
-  const day = async (n) =>
-    scalar(`to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD')`, [n]);
 
   /** create_appointment, optionally confirming a historical record. */
   const create = (date, time, { token = T.kc, staff = jack, ws = shared, amount = 200,
@@ -139,32 +137,50 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     // working hours rather than for being past — correct, and what PR-11
     // asserts. To test the PAST rule alone, use a time earlier today that is
     // inside the window.
-    const nowMinutesForEarlier = Number(nowMyt.slice(11, 13)) * 60 + Number(nowMyt.slice(14, 16));
     // Someone with nothing booked today, so a real appointment cannot make this
     // fail on an overlap rather than on the rule it tests.
-    const [freeToday] = await fx.query(
-      `select s.id from public.staff s
+    // Deterministic, at any hour of any day, with any amount of manual data.
+    //
+    // The earlier versions of this check depended on the state of the database
+    // and the clock — "a staff member with nothing booked today", then "a gap
+    // before 10:30" — and skipped whenever reality did not oblige. Run at
+    // 00:45, no past time today is inside the 09:00-19:00 window at all, so the
+    // check simply disappeared and the branch lost its coverage.
+    //
+    // So the fixture MAKES the conditions instead of waiting for them: give one
+    // staff member an all-day window on today's weekday, and record at 00:00,
+    // which is at or behind the clock at every instant of every day. The window
+    // is restored by exact row id at teardown.
+    const todayDow = await scalar(
+      `extract(dow from (now() at time zone 'Asia/Kuala_Lumpur')::date)::int`);
+    const [gapStaff] = await fx.query(
+      `select s.id
+         from public.staff s
+         left join public.appointments a
+           on a.staff_id = s.id and a.status = 'booked'
+          and a.appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date
+          and a.start_time < '02:00'::time
         where s.is_active
-          and not exists (select 1 from public.appointments a
-                           where a.staff_id = s.id and a.status = 'booked'
-                             and a.appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date)
+        group by s.id
+       having count(a.id) = 0
         limit 1`);
-    if (nowMinutesForEarlier > 10 * 60 && freeToday) {
-      const earlierConfirmed = track(await create(today, "09:30", { confirmPast: true, staff: freeToday.id,
-        ws: freeToday.id === victor ? privateWs : shared }));
+
+    if (gapStaff) {
+      await fx.setWorkingHours(gapStaff.id, todayDow, "00:00", "23:59");
+      const isVictor = gapStaff.id === victor;
+      const earlierConfirmed = track(await create(today, "00:00", {
+        confirmPast: true, staff: gapStaff.id, ws: isVictor ? privateWs : shared }));
       rec.check({
         id: "PR-08 earlier today IS recordable when confirmed", actor: "KC",
-        setup: `it is ${nowMyt} MYT, and 09:30 is inside working hours`,
-        action: `create on ${today} 09:30 with p_confirm_past = true`,
-        expected: "ALLOWED",
+        setup: `it is ${nowMyt} MYT; the staff member has an all-day window today`,
+        action: `create on ${today} 00:00 with p_confirm_past = true`,
+        expected: "ALLOWED — 00:00 today is behind the clock at every hour",
         actual: earlierConfirmed.ok ? "recorded" : earlierConfirmed.msg, ok: earlierConfirmed.ok,
       });
     } else {
       rec.skip({
         id: "PR-08 earlier today IS recordable when confirmed", actor: "KC",
-        reason: !freeToday
-          ? "every staff member already has an appointment today, so an overlap would mask the rule"
-          : `it is ${nowMyt} MYT — no past time today falls inside working hours yet`,
+        reason: "every staff member already has a booking before 02:00 today",
       });
     }
 
@@ -212,11 +228,8 @@ const summary = await runSuite("PAST APPOINTMENT RECORDING (0010)", async ({ ids
     // Working hours: give Dyron a narrow window on the weekday of a past date.
     const pastDate = await pastFreeDate(dyron, 8);
     const dow = await scalar(`extract(dow from $1::date)::int`, [pastDate]);
-    fx.trackWorkingHours(dyron, dow);
-    await db.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [dyron, dow]);
-    await db.query(
-      `insert into public.staff_working_hours (staff_id, day_of_week, start_time, end_time)
-       values ($1,$2,'09:00','12:00')`, [dyron, dow]);
+    // Tracked and restored by exact row id, not deleted by weekday.
+    await fx.setWorkingHours(dyron, dow, "09:00", "12:00");
 
     const outside = await create(pastDate, "16:00", { confirmPast: true, staff: dyron });
     if (outside.ok) fx.track(outside.body);

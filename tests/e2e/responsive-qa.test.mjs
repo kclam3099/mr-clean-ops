@@ -34,6 +34,7 @@ const rec = createRecorder("RESPONSIVE / UX QA (browser)");
 let browser;
 try {
   await assertAppIsUp();
+  await fx.watchAppointments(`remarks = $1`, [fx.TAG]);
   browser = await chromium.launch();
 
   // A long customer name and address are the realistic stress case for
@@ -209,46 +210,59 @@ try {
   }
 
   // ---- empty states ----
-  // Pick a staff member who genuinely has nothing today rather than assuming
-  // it, so a PASS here means the empty state really rendered.
+  //
+  // The empty agenda must say something, not render a blank area. Finding a
+  // staff member with nothing TODAY depends on how busy the business actually
+  // is, and once the owner started using the app for real, that condition
+  // stopped holding and the check silently lost its coverage.
+  //
+  // So it searches for any staff-and-route pair that is genuinely empty rather
+  // than insisting on one particular combination. Three staff across today,
+  // tomorrow and this month gives nine chances at a real empty page, and the
+  // assertion is unchanged — it still reads a live rendered route.
   {
-    const [idle] = await fx.query(
-      `select s.id, p.full_name
-         from public.staff s join public.profiles p on p.id = s.profile_id
-        where p.full_name like 'TEST_%'
-          and not exists (
-            select 1 from public.appointments a
-             where a.staff_id = s.id and a.status = 'booked'
-               and a.appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date)
-        order by p.full_name limit 1`);
-    // Skip rather than throw. Manual use of the app can legitimately leave every
-    // staff member busy today, and a throw here abandoned every later check —
-    // the same trap as the earlier "0 PASS / 0 FAIL" crash.
-    if (!idle) {
+    const routes = [
+      ["/my/today", "appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date"],
+      ["/my/tomorrow", "appt_date = (now() at time zone 'Asia/Kuala_Lumpur')::date + 1"],
+      ["/my/month", "date_trunc('month', appt_date) = date_trunc('month', (now() at time zone 'Asia/Kuala_Lumpur')::date)"],
+    ];
+
+    let target = null;
+    for (const [route, predicate] of routes) {
+      const rows = await fx.query(
+        `select p.full_name
+           from public.staff s join public.profiles p on p.id = s.profile_id
+          where p.full_name like 'TEST_%'
+            and not exists (
+              select 1 from public.appointments a
+               where a.staff_id = s.id and a.status = 'booked' and ${predicate})
+          order by p.full_name limit 1`);
+      if (rows.length) { target = { route, name: rows[0].full_name }; break; }
+    }
+
+    if (!target) {
       rec.skip({
         id: "QA-empty state says something useful", actor: "harness",
-        reason: "every TEST_ staff has an appointment today, so there is no empty agenda to check",
+        reason: "every TEST_ staff has appointments today, tomorrow AND this month, "
+              + "so no route renders an empty agenda to check",
       });
-    }
-    const idleEmail = idle
-      ? `${idle.full_name.toLowerCase().replace("_", "-")}@mrcleanclean.dev.test` : null;
-    if (idleEmail) {
-
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const page = await ctx.newPage();
-    await login(page, idleEmail);
-    await page.goto(`${BASE}/my/today`, { waitUntil: "load" });
-    await page.waitForTimeout(1200);
-    const text = await page.evaluate(() => document.body.innerText);
-    rec.check({
-      id: "QA-empty state says something useful", actor: idle.full_name,
-      setup: "no appointments today",
-      action: "read the page",
-      expected: "an explanatory empty state, not a blank area",
-      actual: /nothing scheduled/i.test(text) ? "present" : text.slice(0, 80),
-      ok: /nothing scheduled/i.test(text),
-    });
-    await ctx.close();
+    } else {
+      const email = `${target.name.toLowerCase().replace("_", "-")}@mrcleanclean.dev.test`;
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page = await ctx.newPage();
+      await login(page, email);
+      await gotoStable(page, `${BASE}${target.route}`);
+      await page.waitForTimeout(1200);
+      const text = await page.evaluate(() => document.body.innerText);
+      rec.check({
+        id: "QA-empty state says something useful", actor: target.name,
+        setup: `nothing scheduled on ${target.route}`,
+        action: "read the page",
+        expected: "an explanatory empty state, not a blank area",
+        actual: /nothing scheduled/i.test(text) ? "present" : text.slice(0, 80),
+        ok: /nothing scheduled/i.test(text),
+      });
+      await ctx.close();
     }
   }
 
@@ -259,12 +273,13 @@ try {
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
-  await db.query(`delete from public.appointment_items where appointment_id in
-    (select id from public.appointments where remarks = $1)`, [fx.TAG]);
-  await db.query(`delete from public.audit_logs where entity_id in
-    (select id from public.appointments where remarks = $1)`, [fx.TAG]);
-  await db.query(`delete from public.appointments where remarks = $1`, [fx.TAG]);
-  await fx.cleanup();
+  // Take ownership of rows that APPEARED while this suite ran, then delete by
+  // exact id. A manual booking matching the same pattern existed at baseline
+  // and is therefore never adopted, never touched.
+  const adopted = await fx.adoptNew();
+  const removed = await fx.cleanup();
+  console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
+    + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
   process.exitCode = summary.fail === 0 ? 0 : 1;
 }

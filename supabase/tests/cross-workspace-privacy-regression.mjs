@@ -28,7 +28,7 @@ const summary = await runSuite('CROSS-WORKSPACE PRIVACY REGRESSION', async ({ id
   const before = await fx.query(
     `select is_active from public.staff_workspaces where staff_id = $1 and workspace_id = $2`, [jack, priv]);
   const preexisting = before.length > 0;
-  fx.trackMembership(jack, priv, preexisting && before[0].is_active);
+  await fx.rememberMembership(jack, priv);
 
   const grant = await rpc('set_staff_workspace_active', T.kc, {
     p_staff_id: jack, p_workspace_id: priv, p_is_active: true });

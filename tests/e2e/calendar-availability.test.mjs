@@ -402,21 +402,21 @@ try {
     // Give Jack a hidden private job, and check the customer message loses that
     // time without ever explaining why. Dyron is booked at the same time first,
     // so the union rule cannot keep the slot alive.
-    const hiddenDate = await fx.freeDate(ids.staff.jack, { offsetDays: 3 });
+    // The experiment has to run on a day the CUSTOMER MESSAGE actually covers,
+    // which is this week only. Picking a free date by offset kept landing in
+    // next week, so "before" was empty and the comparison proved nothing.
+    //
+    // So read the message first and take a day it already offers at 10am, then
+    // fill that slot for both staff and require the time to disappear. If no
+    // day offers 10am there is nothing to remove, and that is reported as a
+    // skip rather than passing over an empty string.
     const existing = await fx.query(
       `select id, is_active from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
       [ids.staff.jack, ids.ws.private]);
-    fx.trackMembership(ids.staff.jack, ids.ws.private, existing.length > 0 && existing[0].is_active);
-    if (existing.length > 0) {
-      await db.query(`update public.staff_workspaces set is_active = true, ended_at = null where id = $1`,
-        [existing[0].id]);
-    } else {
-      await db.query(
-        `insert into public.staff_workspaces (staff_id, workspace_id, is_active) values ($1,$2,true)`,
-        [ids.staff.jack, ids.ws.private]);
-    }
+    void existing;
+    await fx.setMembership(ids.staff.jack, ids.ws.private, true);
 
-    const readTimes = async (page) => {
+    const readMessage = async (page) => {
       await page.goto(`${BASE}/availability`, { waitUntil: "load" });
       await page.waitForSelector("[data-customer-message]", { timeout: 20_000 });
       await settle(page);
@@ -424,25 +424,60 @@ try {
     };
 
     const { page, ctx } = await session(ids.email.nick);
-    const before = await readTimes(page);
+    const before = await readMessage(page);
 
-    // Dyron in the open, Jack hidden — both at 10:00 on the same day.
+    // Which weekday does the message offer at 10am, and what date is that?
+    const ZH = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+    const lines = before.split("\n");
+    let zh = null;
+    for (let i = 0; i < lines.length; i++) {
+      if (ZH.includes(lines[i]) && (lines[i + 1] ?? "").includes("10am")) { zh = lines[i]; break; }
+    }
+
+    let hiddenDate = null;
+    if (zh) {
+      const isoDow = ZH.indexOf(zh) + 1;   // 1 = Monday, matching to_char(..., 'ID')
+      const found = await fx.query(
+        `select to_char(d, 'YYYY-MM-DD') dt
+           from generate_series(
+                  (now() at time zone 'Asia/Kuala_Lumpur')::date,
+                  (date_trunc('week', (now() at time zone 'Asia/Kuala_Lumpur')::date)::date + 6),
+                  interval '1 day') d
+          where to_char(d, 'ID')::int = $1
+          limit 1`, [isoDow]);
+      hiddenDate = found.length ? found[0].dt : null;
+    }
+
+    if (!hiddenDate) {
+      rec.skip({
+        id: "AVL-10 a hidden appointment removes the time (CRITICAL)", actor: "NICK",
+        reason: "the customer message offers no 10am slot this week, so there is no time to remove "
+              + "(the same privacy property is asserted by AVL-04 and AVL-11)",
+      });
+      rec.skip({
+        id: "AVL-11 the removal explains nothing (CRITICAL)", actor: "NICK",
+        reason: "depends on AVL-10 having a slot to remove",
+      });
+      await ctx.close();
+      await fx.restoreMembership(ids.staff.jack, ids.ws.private);
+    } else {
+
+    // Dyron in the open, Jack hidden — both at 10:00, so the union rule cannot
+    // keep the slot alive.
     const dyronJob = await rpc("create_appointment", kcToken, bookingArgs({
       ws: ids.ws.shared, staff: ids.staff.dyron, date: hiddenDate, time: "10:00",
-      amount: 200, remarks: fx.TAG }));
+      amount: 200, remarks: fx.TAG, confirmPast: undefined }));
     if (dyronJob.ok) fx.track(dyronJob.body);
     const hidden = await rpc("create_appointment", kcToken, bookingArgs({
       ws: ids.ws.private, staff: ids.staff.jack, date: hiddenDate, time: "10:00", amount: 200,
       remarks: fx.TAG, customer: SYNTHETIC_PRIVATE_CUSTOMER }));
     if (hidden.ok) fx.track(hidden.body);
 
-    const after = await readTimes(page);
-    const weekday = (await fx.query(`select to_char($1::date,'ID') d`, [hiddenDate]))[0].d;
-    const zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][Number(weekday) - 1];
+    const after = await readMessage(page);
     const dayTimes = (msg) => {
-      const lines = msg.split("\n");
-      const i = lines.indexOf(zh);
-      return i === -1 ? "" : (lines[i + 1] ?? "");
+      const l = msg.split("\n");
+      const i = l.indexOf(zh);
+      return i === -1 ? "" : (l[i + 1] ?? "");
     };
 
     rec.check({
@@ -469,17 +504,12 @@ try {
       security: true,
     });
     await ctx.close();
-
-    // Undo the membership immediately; leaving it would give Jack two eligible
-    // workspaces for every later block.
-    if (existing.length > 0) {
-      await db.query(`update public.staff_workspaces set is_active = $2 where id = $1`,
-        [existing[0].id, existing[0].is_active]);
-    } else {
-      await db.query(
-        `delete from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
-        [ids.staff.jack, ids.ws.private]);
+    await fx.restoreMembership(ids.staff.jack, ids.ws.private);
     }
+
+    // Undo it now: left in place it would give Jack two eligible workspaces for
+    // every later block. Restored by exact row id.
+    await fx.restoreMembership(ids.staff.jack, ids.ws.private);
   }
 
 

@@ -31,6 +31,10 @@ try {
   await assertAppIsUp();
   browser = await chromium.launch();
 
+  // Baseline BEFORE anything is created, so only rows that appear during the
+  // run are ever owned by it.
+  await fx.watchAppointments(`customer_name like 'F2 %'`, []);
+
   const day = async (n) => (await fx.query(
     `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
   // The nearest day on which EVERY staff member this suite books is free.
@@ -406,21 +410,27 @@ try {
     const hostile = ["https://evil.example/x", "//evil.example", "javascript:alert(1)", "/settings", "../../etc"];
     const landed = [];
     for (const value of hostile) {
+      // A fresh free date per iteration. The probe used a single fixed offset
+      // and freed the slot between attempts, so one failed cleanup — or one
+      // manual appointment on that day — made every later attempt fail to save
+      // and land on the form, which reads as a redirect defect it is not.
+      const probeDate = await fx.freeDate(ids.staff.jack, { offsetDays: 4 });
       await page.goto(`${BASE}/appointments/new?return=${encodeURIComponent(value)}`, { waitUntil: "load" });
       await page.waitForSelector("#staffId");
       const id = await fillAndSave(page, {
-        staffLabel: "TEST_JACK", date: await day(4), time: "10:00",
+        staffLabel: "TEST_JACK", date: probeDate, time: "10:00",
         customer: "F2 REDIRECT PROBE", items: [["X", "1", "200"]],
       });
       await page.waitForTimeout(1200);
       landed.push(new URL(page.url()).origin + new URL(page.url()).pathname);
       if (id) await cancelById(fx, id);
-      // Each iteration books the same slot, so clear it before the next one.
-      await fx.query(`delete from public.appointment_items where appointment_id in
-        (select id from public.appointments where customer_name = 'F2 REDIRECT PROBE')`);
-      await fx.query(`delete from public.audit_logs where entity_id in
-        (select id from public.appointments where customer_name = 'F2 REDIRECT PROBE')`);
-      await fx.query(`delete from public.appointments where customer_name = 'F2 REDIRECT PROBE'`);
+      // Each iteration books the same slot, so free it before the next one —
+      // by the id THIS iteration created, never by customer name.
+      if (id) {
+        await fx.query(`delete from public.appointment_items where appointment_id = $1`, [id]);
+        await fx.query(`delete from public.audit_logs where entity_id = $1`, [id]);
+        await fx.query(`delete from public.appointments where id = $1`, [id]);
+      }
     }
     rec.check({
       id: "REDIRECT-01 hostile return values cannot leave the app (CRITICAL)", actor: "NICK",
@@ -507,21 +517,8 @@ try {
 
     // STAFF_UNAVAILABLE must NEVER open the dialog. Jack gets a temporary
     // private membership and a hidden private job; Nick attempts that slot.
-    const membership = await fx.query(
-      `select is_active from public.staff_workspaces where staff_id=$1 and workspace_id=$2`,
-      [ids.staff.jack, ids.ws.private]);
-    fx.trackMembership(ids.staff.jack, ids.ws.private, membership.length > 0 && membership[0].is_active);
-    // No unique constraint on (staff_id, workspace_id), so ON CONFLICT is not
-    // available — update-then-insert-if-absent instead.
-    await db.query(
-      `update public.staff_workspaces set is_active = true
-        where staff_id = $1 and workspace_id = $2`, [ids.staff.jack, ids.ws.private]);
-    await db.query(
-      `insert into public.staff_workspaces (staff_id, workspace_id, is_active)
-       select $1, $2, true
-        where not exists (select 1 from public.staff_workspaces
-                           where staff_id = $1 and workspace_id = $2)`,
-      [ids.staff.jack, ids.ws.private]);
+    // Tracked by exact row id and restored at teardown.
+    await fx.setMembership(ids.staff.jack, ids.ws.private, true);
 
     const dHidden = await day(8);
     const hiddenIns = await db.query(
@@ -801,16 +798,13 @@ try {
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
-  // Anything the flow created carries an F2 customer name.
-  await db.query(`delete from public.appointment_items where appointment_id in
-    (select id from public.appointments where customer_name like 'F2 %')`);
-  await db.query(`delete from public.appointment_rule_overrides where subject_appointment_id in
-    (select id from public.appointments where customer_name like 'F2 %')`);
-  await db.query(`delete from public.audit_logs where entity_id in
-    (select id from public.appointments where customer_name like 'F2 %')`);
-  const removed = await db.query(`delete from public.appointments where customer_name like 'F2 %' returning id`);
-  await fx.cleanup();
-  console.log(`fixture cleanup: ${removed.rowCount} F2 appointments removed`);
+  // Take ownership of rows that APPEARED while this suite ran, then delete by
+  // exact id. A manual booking matching the same pattern existed at baseline
+  // and is therefore never adopted, never touched.
+  const adopted = await fx.adoptNew();
+  const removed = await fx.cleanup();
+  console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
+    + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
   process.exitCode = summary.fail === 0 ? 0 : 1;
 }

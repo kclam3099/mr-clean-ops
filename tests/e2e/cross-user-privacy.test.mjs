@@ -43,11 +43,13 @@ try {
   // Temporary synthetic fixture: KC must have something private to leak.
   // ---------------------------------------------------------------------------
   const kcToken = await signIn(ids.email.kc);
-  // Tomorrow, not today: migration 0007 rejects appointments that do not start
-  // strictly in the future, so a "today 10:00" fixture fails whenever this suite
-  // runs after 10am. The date only has to be somewhere KC can load it.
-  const today = (await fx.query(
-    `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + 1), 'YYYY-MM-DD') d`))[0].d;
+  // A future date on which BOTH staff members this fixture books are free.
+  //
+  // It used to be a flat "tomorrow", which was already future-proofed against
+  // the 0007 past guard but not against reality: once the owner had real
+  // bookings, the fixed 10:00 and 13:00 slots collided and the whole suite
+  // aborted. Searching for a free date fixes the cause rather than the symptom.
+  const today = await fx.freeDateForAll([ids.staff.victor, ids.staff.jack], { offsetDays: 1 });
 
   const PRIVATE_CUSTOMER = "E2E PRIVATE CUSTOMER OMEGA";
   const SHARED_CUSTOMER = "E2E SHARED CUSTOMER ALPHA";
@@ -79,7 +81,18 @@ try {
     actual: `private=${priv.ok ? "ok" : priv.msg}, shared=${shared.ok ? "ok" : shared.msg}`,
     ok: priv.ok && shared.ok,
   });
-  if (!priv.ok || !shared.ok) throw new Error("fixture failed; aborting");
+  // No throw. A crash here abandons every remaining check and the run looks
+  // shorter rather than failed — the trap this harness exists to avoid. The
+  // fixture failure is already recorded above as E2E-00; the dependent checks
+  // are skipped explicitly so the missing coverage is visible.
+  const fixtureReady = priv.ok && shared.ok;
+  if (!fixtureReady) {
+    rec.skip({
+      id: "E2E-01..NN cross-user payload checks", actor: "harness",
+      reason: `the fixture could not be created (private=${priv.ok ? "ok" : priv.msg}; `
+            + `shared=${shared.ok ? "ok" : shared.msg}), so the payload scans would prove nothing`,
+    });
+  }
 
   // Strings that must never survive into Nick's browser.
   //

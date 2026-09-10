@@ -38,6 +38,8 @@ try {
   await assertAppIsUp();
   browser = await chromium.launch();
 
+  await fx.watchAppointments(`customer_name like 'TEST CUSTOMER QA%'`, []);
+
   const day = async (n) => (await fx.query(
     `select to_char(((now() at time zone 'Asia/Kuala_Lumpur')::date + $1::int),'YYYY-MM-DD') d`, [n]))[0].d;
 
@@ -535,20 +537,9 @@ try {
     // staff_workspaces is a HISTORY table — no unique (staff, workspace) key,
     // because a membership can start and end more than once. So update an
     // existing row if there is one, and only insert when there is not.
-    const existing = await fx.query(
-      `select id, is_active from public.staff_workspaces
-        where staff_id = $1 and workspace_id = $2`, [ids.staff.jack, ids.ws.private]);
-    fx.trackMembership(ids.staff.jack, ids.ws.private, existing.length > 0 && existing[0].is_active);
-    if (existing.length > 0) {
-      await db.query(
-        `update public.staff_workspaces set is_active = true, ended_at = null where id = $1`,
-        [existing[0].id]);
-    } else {
-      await db.query(
-        `insert into public.staff_workspaces (staff_id, workspace_id, is_active) values ($1, $2, true)`,
-        [ids.staff.jack, ids.ws.private]);
-    }
-
+    // Tracked by exact row id and restored at teardown — the previous version
+    // wrote the row by hand and cleaned up by (staff_id, workspace_id).
+    await fx.setMembership(ids.staff.jack, ids.ws.private, true);
     const { page, ctx } = await session(ids.email.kc);
     await page.goto(`${BASE}/calendar`, { waitUntil: "load" });
     await page.waitForTimeout(800);
@@ -591,19 +582,9 @@ try {
     }
     await ctx.close();
 
-    // Undo the membership NOW rather than at suite teardown. Left in place it
-    // gives Jack two eligible workspaces for every later block, which turns the
-    // normal one-tap assignment into the "Which team?" exception — the paste
-    // checks below were failing for exactly that reason.
-    if (existing.length > 0) {
-      await db.query(
-        `update public.staff_workspaces set is_active = $2 where id = $1`,
-        [existing[0].id, existing[0].is_active]);
-    } else {
-      await db.query(
-        `delete from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
-        [ids.staff.jack, ids.ws.private]);
-    }
+    // Undo it now: left in place it would give Jack two eligible workspaces for
+    // every later block. Restored by exact row id.
+    await fx.restoreMembership(ids.staff.jack, ids.ws.private);
   }
 
   // =========================================================================
@@ -895,16 +876,13 @@ Sofa RM179`);
 } finally {
   const summary = rec.summary();
   if (browser) await browser.close();
-  for (const like of ["TEST CUSTOMER QA%"]) {
-    await db.query(`delete from public.appointment_items where appointment_id in
-      (select id from public.appointments where customer_name like $1)`, [like]);
-    await db.query(`delete from public.audit_logs where entity_id in
-      (select id from public.appointments where customer_name like $1)`, [like]);
-    await db.query(`delete from public.appointment_rule_overrides where subject_appointment_id in
-      (select id from public.appointments where customer_name like $1)`, [like]);
-    await db.query(`delete from public.appointments where customer_name like $1`, [like]);
-  }
-  await fx.cleanup();
+  // Take ownership of rows that APPEARED while this suite ran, then delete by
+  // exact id. A manual booking matching the same pattern existed at baseline
+  // and is therefore never adopted, never touched.
+  const adopted = await fx.adoptNew();
+  const removed = await fx.cleanup();
+  console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
+    + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
   process.exitCode = summary.fail === 0 ? 0 : 1;
 }

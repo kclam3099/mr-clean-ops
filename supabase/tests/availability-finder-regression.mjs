@@ -129,9 +129,9 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
   // C. Hidden cross-workspace conflict blocks, without saying why
   // ==========================================================================
   const dHidden = await day(6);
-  const membership = await fx.query(
-    `select is_active from public.staff_workspaces where staff_id=$1 and workspace_id=$2`, [jack, priv]);
-  fx.trackMembership(jack, priv, membership.length > 0 && membership[0].is_active);
+  // Snapshot before the RPC changes it; teardown restores exactly, and removes
+  // any row that appeared, by that row's own id.
+  await fx.rememberMembership(jack, priv);
   await rpc("set_staff_workspace_active", T.kc, {
     p_staff_id: jack, p_workspace_id: priv, p_is_active: true });
 
@@ -214,7 +214,7 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
 
   const dHours = await day(9);
   const dow = (await fx.query(`select extract(dow from $1::date)::int d`, [dHours]))[0].d;
-  fx.trackWorkingHours(dyron, dow);
+  await fx.rememberWorkingHours(dyron, dow);
   const wh = await rpc("set_staff_working_hours", T.kc, {
     p_staff_id: dyron, p_day_of_week: dow, p_start_time: "12:00", p_end_time: "16:00" });
   const afterHours = await find(T.nick, { p_staff_ids: [dyron], p_from: dHours, p_to: dHours });
@@ -226,7 +226,7 @@ const summary = await runSuite("AVAILABILITY FINDER REGRESSION", async ({ ids, f
     actual: slots(afterHours).join(", ") || "(none)",
     ok: !wh.ok || (afterHours.ok && !slots(afterHours).includes("10:00") && slots(afterHours).includes("13:00")),
   });
-  await fx.query(`delete from public.staff_working_hours where staff_id=$1 and day_of_week=$2`, [dyron, dow]);
+  await fx.clearWorkingHours(dyron, dow);
 
   // 0007: the finder is a STANDARD-JOB surface. There is no amount input, so a
   // caller cannot vary the probe window and sweep for a hidden boundary.
