@@ -12,11 +12,37 @@
 //         appointment audit_logs, staff_time_off, staff-specific working-hours
 //         rows, and Jack's temporary KC Private Team membership.
 //
+// THIS SCRIPT DELETES EVERY APPOINTMENT, including ones a person entered by
+// hand. It is the ONLY place in the repository allowed to delete by a broad
+// predicate, and it is not part of any automated suite: the regression tests
+// coexist with manual data and clean up only rows they created.
+//
+// Because the owner now uses DEV for real operational testing, running this by
+// reflex destroys their work. It therefore refuses unless the caller states
+// the intent explicitly:
+//
+//   CONFIRM_WIPE_DEV_APPOINTMENTS=yes npm run db:reset-dev-fixtures
+//
 // Run: npm run db:reset-dev-fixtures
 
 import { adminClient, assertDevProject, resolveIdentities } from './lib/harness.mjs';
 
 assertDevProject();
+
+if (process.env.CONFIRM_WIPE_DEV_APPOINTMENTS !== 'yes') {
+  console.error(`
+REFUSING TO WIPE DEV.
+
+This deletes EVERY appointment in the DEV project, including manual bookings
+entered through the app. Automated suites do not need it — they own their
+fixtures by exact id and leave everything else alone.
+
+If you genuinely want an empty baseline, say so explicitly:
+
+  CONFIRM_WIPE_DEV_APPOINTMENTS=yes npm run db:reset-dev-fixtures
+`);
+  process.exit(2);
+}
 const db = await adminClient();
 const q = async (sql, params) => (await db.query(sql, params)).rows;
 

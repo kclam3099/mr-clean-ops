@@ -11,6 +11,7 @@ import { dirname, resolve } from 'node:path';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const SUITES = [
+  ['cleanup-safety-regression', 'Cleanup safety / data isolation'],
   ['security-regression', 'Security / identity isolation'],
   ['appointment-engine-regression', 'Appointment engine scheduling rules'],
   ['cross-workspace-privacy-regression', 'Cross-workspace privacy'],

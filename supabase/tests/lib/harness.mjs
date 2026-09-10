@@ -51,15 +51,54 @@ export const CONFIG = {
   dbUser: () => required('SUPABASE_DB_USER'),
 };
 
-// A guard against ever pointing these destructive fixtures at production.
+/**
+ * The project ref these suites are allowed to touch.
+ *
+ * A ref, not a hostname substring: "dev" or "test" appearing in a URL proves
+ * nothing, and a production project could easily contain either word. The ref
+ * identifies one specific Supabase project and nothing else.
+ *
+ * Kept as an allowlist so a future TEST project can be added beside DEV without
+ * loosening the check into a pattern.
+ */
+const TEST_SAFE_PROJECT_REFS = ['ozojfflkchltwqnbflso'];
+
+/** The ref out of a Supabase URL: https://<ref>.supabase.co */
+function projectRef(url) {
+  const m = /https?:\/\/([a-z0-9]{20})\.supabase\./i.exec(url);
+  return m ? m[1] : null;
+}
+
+/**
+ * Fail-closed guard for anything that writes to the database.
+ *
+ * Refuses unless the target project is explicitly on the allowlist. An
+ * unparseable URL, an unknown ref, or a missing ref all refuse — the default
+ * answer is no, so a typo or a copied .env cannot silently point a destructive
+ * suite at the wrong project.
+ *
+ * The old override (ALLOW_NON_DEV_TESTS=true) is deliberately gone. A plain
+ * boolean escape hatch is exactly the thing that gets pasted into a shell
+ * against production; allowing a new project now means adding its ref above,
+ * in a reviewed diff.
+ */
 export function assertDevProject() {
-  const u = CONFIG.url();
-  if (process.env.ALLOW_NON_DEV_TESTS === 'true') return;
-  if (!/ozojfflkchltwqnbflso/.test(u)) {
-    console.error(`\nRefusing to run: ${u} is not the known DEV project.\n` +
-      `These suites create and DELETE rows. Set ALLOW_NON_DEV_TESTS=true only if you are certain.`);
+  const url = CONFIG.url();
+  const ref = projectRef(url);
+
+  if (!ref) {
+    console.error(`\nRefusing to run: cannot read a Supabase project ref from ${url}.\n` +
+      `These suites create and DELETE rows, so an unrecognised target is refused.`);
     process.exit(2);
   }
+  if (!TEST_SAFE_PROJECT_REFS.includes(ref)) {
+    console.error(`\nRefusing to run against project ${ref}.\n` +
+      `Only these projects are marked test-safe: ${TEST_SAFE_PROJECT_REFS.join(', ')}.\n` +
+      `These suites create and DELETE rows. To allow a new test project, add its\n` +
+      `ref to TEST_SAFE_PROJECT_REFS in supabase/tests/lib/harness.mjs.`);
+    process.exit(2);
+  }
+  return ref;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,23 +302,251 @@ export async function signInAll(ids) {
 }
 
 // ---------------------------------------------------------------------------
-// fixture tracker — everything a suite creates is registered here and removed
-// in teardown, so no suite leaves scheduling data behind
+// fixture tracker — EXACT-ID OWNERSHIP
+//
+// A test may delete only rows it can PROVE it created. That proof is the
+// primary key captured at creation time, and nothing else.
+//
+// This rule exists because it was broken. A teardown once deleted rows matching
+// `remarks IS NOT NULL`, reasoning that a remark looked like fixture text, and
+// destroyed a real appointment the owner had entered. No predicate over
+// customer_name, remarks, dates, staff, workspace, amount or status can
+// establish ownership: manual data can match any of them.
+//
+// So the following are PROHIBITED in teardown, permanently:
+//   - customer_name LIKE / starts-with / equals
+//   - remarks = <tag>  or  remarks IS NOT NULL
+//   - date ranges, staff_id, workspace_id, status, amount
+//   - "looks like a fixture"
+//
+// TAG remains, but ONLY as a diagnostic label a human can grep for. It carries
+// no authority to delete anything.
+//
+// Rows a test did not create are left alone, even when they look stale.
+// Reporting an unowned leftover is correct; guessing is not.
 // ---------------------------------------------------------------------------
 export function createFixture(db) {
-  const appointments = new Set();
-  const timeOff = new Set();
-  const workingHours = [];      // { staffId, dayOfWeek }
-  const memberships = [];       // { staffId, workspaceId, restoreActive }
+  const appointments = new Set();          // exact appointment ids
+  const timeOff = new Set();               // exact staff_time_off ids
+  const insertedWorkingHours = new Set();  // rows THIS run inserted
+  const removedWorkingHours = [];          // rows THIS run displaced, for restore
+  const insertedMemberships = new Set();   // rows THIS run inserted
+  const changedMemberships = [];           // rows THIS run modified, for restore
+  const insertedSlots = new Set();         // suggested_time_slots ids
+  const membershipSnapshots = [];          // state before a test changed it via RPC
+  const workingHourSnapshots = [];         // ditto, for working hours
   const usedDates = new Set();
+  const watches = [];                      // pre-existing ids, so only NEW rows are adopted
   const TAG = 'REGRESSION FIXTURE';
+  /** Unique per run, so a lookup by name cannot match another run or a manual
+   *  booking. Used to FIND ids, never as a licence to delete. */
+  const RUN_ID = `R${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`.toUpperCase();
+
+  /** True once the pre-test state of this (staff, weekday) has been captured,
+   *  by either route. Recording it twice would let a row the TEST created be
+   *  restored at teardown as though it had always been there — which is how a
+   *  late-window fixture leaked into the database and survived the run. */
+  const originalCaptured = (staffId, dayOfWeek) =>
+    removedWorkingHours.some((r) => r.staff_id === staffId && r.day_of_week === dayOfWeek)
+    || workingHourSnapshots.some((s) => s.staffId === staffId && s.dayOfWeek === dayOfWeek);
 
   return {
     TAG,
+    RUN_ID,
     track(id) { if (id) appointments.add(id); return id; },
     trackTimeOff(id) { if (id) timeOff.add(id); return id; },
-    trackWorkingHours(staffId, dayOfWeek) { workingHours.push({ staffId, dayOfWeek }); },
-    trackMembership(staffId, workspaceId, restoreActive) { memberships.push({ staffId, workspaceId, restoreActive }); },
+    trackSuggestedSlot(id) { if (id) insertedSlots.add(id); return id; },
+
+    /**
+     * Take ownership of rows this run created through the UI, where the id was
+     * never returned to the caller.
+     *
+     * The lookup is a DISCOVERY step, not an authorization: whatever it finds
+     * is added to the exact-id set, and only that set is ever deleted. Pass a
+     * predicate narrow enough to exclude manual data — a RUN_ID-bearing
+     * customer name is the intended shape.
+     */
+    async adopt(whereSql, params) {
+      const { rows } = await db.query(
+        `select id from public.appointments where ${whereSql}`, params);
+      for (const r of rows) appointments.add(r.id);
+      return rows.map((r) => r.id);
+    },
+
+    /**
+     * Watch a set of rows a browser test is about to create.
+     *
+     * E2E suites drive the real UI, so the new row's id is never returned to
+     * them and they used to clean up with `customer_name LIKE ...`. That is
+     * ownership by resemblance, and resemblance is exactly what destroyed a
+     * real appointment.
+     *
+     * This records which matching rows ALREADY EXIST, so `adoptNew()` can take
+     * ownership of the difference — rows that appeared while the suite ran.
+     * A manual booking matching the same pattern was present at baseline and is
+     * therefore never adopted, never deleted.
+     */
+    async watchAppointments(whereSql, params) {
+      const { rows } = await db.query(
+        `select id from public.appointments where ${whereSql}`, params);
+      watches.push({ whereSql, params, baseline: new Set(rows.map((r) => r.id)) });
+      return rows.length;
+    },
+
+    /** Take ownership of everything that appeared since `watchAppointments`. */
+    async adoptNew() {
+      let adopted = 0;
+      for (const w of watches) {
+        const { rows } = await db.query(
+          `select id from public.appointments where ${w.whereSql}`, w.params);
+        for (const r of rows) {
+          if (!w.baseline.has(r.id)) { appointments.add(r.id); adopted++; }
+        }
+      }
+      return adopted;
+    },
+
+    /** Ids this run owns, for assertions about its own footprint. */
+    ownedAppointmentIds() { return [...appointments]; },
+
+    /**
+     * Replace a staff member's working hours for one weekday, remembering the
+     * exact row displaced so teardown can put it back.
+     *
+     * The old code deleted by (staff_id, day_of_week) and never restored, so a
+     * manually configured window was destroyed rather than borrowed.
+     */
+    async setWorkingHours(staffId, dayOfWeek, startTime, endTime) {
+      const alreadyCaptured = originalCaptured(staffId, dayOfWeek);
+      const { rows: existing } = await db.query(
+        `select id, staff_id, day_of_week, start_time, end_time
+           from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
+        [staffId, dayOfWeek]);
+      for (const row of existing) {
+        // Only remember a row this run did NOT create. Recording our own
+        // insert as "displaced" would restore it at teardown and collide with
+        // uq_working_hours_staff_day; the pre-existing row is the one that has
+        // to come back, and it was captured the first time round.
+        if (insertedWorkingHours.has(row.id)) insertedWorkingHours.delete(row.id);
+        else if (!alreadyCaptured) removedWorkingHours.push(row);
+        await db.query(`delete from public.staff_working_hours where id = $1`, [row.id]);
+      }
+      const { rows } = await db.query(
+        `insert into public.staff_working_hours (staff_id, day_of_week, start_time, end_time)
+         values ($1,$2,$3::time,$4::time) returning id`,
+        [staffId, dayOfWeek, startTime, endTime]);
+      insertedWorkingHours.add(rows[0].id);
+      return rows[0].id;
+    },
+
+    /** Temporarily remove a weekday's window, remembering it for restore. */
+    async clearWorkingHours(staffId, dayOfWeek) {
+      const alreadyCaptured = originalCaptured(staffId, dayOfWeek);
+      const { rows: existing } = await db.query(
+        `select id, staff_id, day_of_week, start_time, end_time
+           from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
+        [staffId, dayOfWeek]);
+      for (const row of existing) {
+        // Same rule as setWorkingHours: our own insert is simply dropped, only
+        // a pre-existing row is remembered for restore.
+        if (insertedWorkingHours.has(row.id)) insertedWorkingHours.delete(row.id);
+        else if (!alreadyCaptured) removedWorkingHours.push(row);
+        await db.query(`delete from public.staff_working_hours where id = $1`, [row.id]);
+      }
+      return existing.length;
+    },
+
+    /**
+     * Give a staff member a workspace membership for the duration of a test.
+     * An existing row is UPDATED and its previous values remembered; a new row
+     * is inserted and its id remembered. Teardown restores exactly.
+     */
+    async setMembership(staffId, workspaceId, isActive) {
+      const { rows: existing } = await db.query(
+        `select id, is_active, ended_at from public.staff_workspaces
+          where staff_id = $1 and workspace_id = $2`, [staffId, workspaceId]);
+      if (existing.length > 0) {
+        const row = existing[0];
+        // Do not record a row this run inserted as "changed" — it will be
+        // deleted outright at teardown, and restoring it would resurrect it.
+        if (!insertedMemberships.has(row.id) && !changedMemberships.some((c) => c.id === row.id)) {
+          changedMemberships.push({
+            id: row.id, staffId, workspaceId, isActive: row.is_active, endedAt: row.ended_at });
+        }
+        await db.query(
+          `update public.staff_workspaces set is_active = $2, ended_at = null where id = $1`,
+          [row.id, isActive]);
+        return row.id;
+      }
+      const { rows } = await db.query(
+        `insert into public.staff_workspaces (staff_id, workspace_id, is_active)
+         values ($1,$2,$3) returning id`, [staffId, workspaceId, isActive]);
+      insertedMemberships.add(rows[0].id);
+      return rows[0].id;
+    },
+
+    /**
+     * Snapshot a membership BEFORE the test changes it through the real RPC.
+     *
+     * Some suites must go through `set_staff_workspace_active` rather than
+     * writing the row directly, because the RPC is the thing under test. This
+     * records which rows existed beforehand; teardown then restores those and
+     * removes any row that appeared afterwards.
+     *
+     * Ownership is still exact and still provable: a row absent at snapshot
+     * time and present at teardown was created by this run, and it is deleted
+     * by its own id, never by (staff_id, workspace_id).
+     */
+    async rememberMembership(staffId, workspaceId) {
+      const { rows } = await db.query(
+        `select id, is_active, ended_at from public.staff_workspaces
+          where staff_id = $1 and workspace_id = $2`, [staffId, workspaceId]);
+      membershipSnapshots.push({
+        staffId, workspaceId,
+        before: rows.map((r) => ({ id: r.id, isActive: r.is_active, endedAt: r.ended_at })),
+      });
+      return rows.length > 0;
+    },
+
+    /** The same snapshot-and-restore for a weekday's working hours, when the
+     *  test changes them through `set_staff_working_hours`. */
+    async rememberWorkingHours(staffId, dayOfWeek) {
+      const { rows } = await db.query(
+        `select id, staff_id, day_of_week, start_time, end_time
+           from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
+        [staffId, dayOfWeek]);
+      workingHourSnapshots.push({ staffId, dayOfWeek, before: rows });
+      return rows.length > 0;
+    },
+
+    /**
+     * Undo one membership NOW rather than at teardown.
+     *
+     * A temporary membership left in place gives a staff member a second
+     * eligible workspace for every later block, which turns the normal
+     * one-tap assignment into the "Which team?" exception and makes later
+     * checks fail for a reason that has nothing to do with them.
+     */
+    async restoreMembership(staffId, workspaceId) {
+      const index = changedMemberships.findIndex((c) => c.staffId === staffId && c.workspaceId === workspaceId);
+      if (index !== -1) {
+        const m = changedMemberships[index];
+        await db.query(
+          `update public.staff_workspaces set is_active = $2, ended_at = $3 where id = $1`,
+          [m.id, m.isActive, m.endedAt]);
+        changedMemberships.splice(index, 1);
+        return;
+      }
+      for (const id of [...insertedMemberships]) {
+        const { rows } = await db.query(
+          `select id from public.staff_workspaces
+            where id = $1 and staff_id = $2 and workspace_id = $3`, [id, staffId, workspaceId]);
+        if (rows.length) {
+          await db.query(`delete from public.staff_workspaces where id = $1`, [id]);
+          insertedMemberships.delete(id);
+        }
+      }
+    },
 
     /** A far-future date on which `staffId` has no appointment at all, never
      *  reused within a run. Keeps suites independent of existing data. */
@@ -298,26 +565,36 @@ export function createFixture(db) {
       throw new Error('no free date available for fixture');
     },
 
-    /**
-     * Throw if `staffId` already has something booked on `date`.
-     *
-     * Suites that pick a date by fixed offset (`today + 70`) rather than via
-     * freeDate() are only safe while nothing else occupies that slot. Today
-     * the DEV baseline holds no appointments at all, so they are — but that is
-     * a property of the current data, not of the test. This turns a future
-     * collision into a clear failure at the point of setup instead of a
-     * puzzling PHYSICAL_OVERLAP several assertions later.
-     */
-    async requireFree(staffId, date, label = '') {
-      const { rows } = await db.query(
-        `select count(*)::int n from public.appointments
-          where staff_id = $1 and appt_date = $2 and status = 'booked'`, [staffId, date]);
-      if (rows[0].n > 0) {
-        throw new Error(
-          `fixture date collision${label ? ` (${label})` : ''}: staff already has ` +
-          `${rows[0].n} appointment(s) on ${date}. Reset the DEV baseline, or use fx.freeDate().`);
+    /** A date on which EVERY listed staff member is free — for suites that book
+     *  several people on one date. */
+    async freeDateForAll(staffIds, { offsetDays = 1 } = {}) {
+      for (let k = offsetDays; k < offsetDays + 900; k++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() + k);
+        const iso = d.toISOString().slice(0, 10);
+        if (usedDates.has(iso)) continue;
+        const { rows } = await db.query(
+          `select count(*)::int n from public.appointments
+            where appt_date = $1 and status = 'booked' and staff_id = any($2::uuid[])`,
+          [iso, staffIds]);
+        if (rows[0].n === 0) { usedDates.add(iso); return iso; }
       }
-      return date;
+      throw new Error('no date found on which every requested staff member is free');
+    },
+
+    /** The nearest PAST date on which `staffId` has nothing booked. */
+    async freePastDate(staffId, { offsetDays = 1 } = {}) {
+      for (let k = offsetDays; k < offsetDays + 900; k++) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - k);
+        const iso = d.toISOString().slice(0, 10);
+        if (usedDates.has(iso)) continue;
+        const { rows } = await db.query(
+          `select count(*)::int n from public.appointments
+            where staff_id = $1 and appt_date = $2 and status = 'booked'`, [staffId, iso]);
+        if (rows[0].n === 0) { usedDates.add(iso); return iso; }
+      }
+      throw new Error('no free past date available for fixture');
     },
 
     /** Server-computed columns, for assertions the API does not expose. */
@@ -327,11 +604,17 @@ export function createFixture(db) {
     },
     async query(sql, params) { return (await db.query(sql, params)).rows; },
 
+    /**
+     * Remove exactly what this run created, and restore exactly what it
+     * displaced. Every statement below is keyed on a captured primary key, or
+     * derived from one — there is no predicate over user-supplied content.
+     */
     async cleanup() {
       const ids = [...appointments];
       if (ids.length) {
-        // overrides first (conflicting_appointment_id has no ON DELETE CASCADE),
-        // then the audit rows that reference these appointments, then the rows.
+        // Children first: overrides have no ON DELETE CASCADE on
+        // conflicting_appointment_id. All three are derived from ids this run
+        // owns, so none can reach an appointment it did not create.
         await db.query(`delete from public.appointment_rule_overrides
                         where subject_appointment_id = any($1::uuid[])
                            or conflicting_appointment_id = any($1::uuid[])`, [ids]);
@@ -342,28 +625,70 @@ export function createFixture(db) {
       if (timeOff.size) {
         await db.query(`delete from public.staff_time_off where id = any($1::uuid[])`, [[...timeOff]]);
       }
-      for (const w of workingHours) {
-        await db.query(`delete from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
-          [w.staffId, w.dayOfWeek]);
+      if (insertedSlots.size) {
+        await db.query(`delete from public.suggested_time_slots where id = any($1::uuid[])`,
+          [[...insertedSlots]]);
       }
-      for (const m of memberships) {
-        if (m.restoreActive) {
-          await db.query(`update public.staff_workspaces set is_active = true
-                          where staff_id = $1 and workspace_id = $2`, [m.staffId, m.workspaceId]);
-        } else {
-          await db.query(`delete from public.staff_workspaces
-                          where staff_id = $1 and workspace_id = $2`, [m.staffId, m.workspaceId]);
+      if (insertedWorkingHours.size) {
+        await db.query(`delete from public.staff_working_hours where id = any($1::uuid[])`,
+          [[...insertedWorkingHours]]);
+      }
+      // Put back what was displaced, newest first so a later change is undone
+      // before the earlier one it replaced.
+      for (const row of [...removedWorkingHours].reverse()) {
+        await db.query(
+          `insert into public.staff_working_hours (id, staff_id, day_of_week, start_time, end_time)
+           values ($1,$2,$3,$4,$5) on conflict (id) do nothing`,
+          [row.id, row.staff_id, row.day_of_week, row.start_time, row.end_time]);
+      }
+      if (insertedMemberships.size) {
+        await db.query(`delete from public.staff_workspaces where id = any($1::uuid[])`,
+          [[...insertedMemberships]]);
+      }
+      for (const m of [...changedMemberships].reverse()) {
+        await db.query(
+          `update public.staff_workspaces set is_active = $2, ended_at = $3 where id = $1`,
+          [m.id, m.isActive, m.endedAt]);
+      }
+
+      // Snapshot restores. A row that was absent when the snapshot was taken
+      // and is present now was created by this run, so it is removed BY ITS OWN
+      // ID. Rows that existed before are put back exactly as they were.
+      for (const snap of [...membershipSnapshots].reverse()) {
+        const knownIds = snap.before.map((b) => b.id);
+        const { rows: now } = await db.query(
+          `select id from public.staff_workspaces where staff_id = $1 and workspace_id = $2`,
+          [snap.staffId, snap.workspaceId]);
+        const appeared = now.map((r) => r.id).filter((id) => !knownIds.includes(id));
+        if (appeared.length) {
+          await db.query(`delete from public.staff_workspaces where id = any($1::uuid[])`, [appeared]);
+        }
+        for (const b of snap.before) {
+          await db.query(
+            `update public.staff_workspaces set is_active = $2, ended_at = $3 where id = $1`,
+            [b.id, b.isActive, b.endedAt]);
         }
       }
-      // belt and braces: nothing tagged by this harness may survive a run
-      await db.query(`delete from public.appointment_items where appointment_id in
-                      (select id from public.appointments where remarks = $1)`, [TAG]);
-      await db.query(`delete from public.appointment_rule_overrides where subject_appointment_id in
-                      (select id from public.appointments where remarks = $1)`, [TAG]);
-      await db.query(`delete from public.appointments where remarks = $1`, [TAG]);
+      for (const snap of [...workingHourSnapshots].reverse()) {
+        const knownIds = snap.before.map((b) => b.id);
+        const { rows: now } = await db.query(
+          `select id from public.staff_working_hours where staff_id = $1 and day_of_week = $2`,
+          [snap.staffId, snap.dayOfWeek]);
+        const appeared = now.map((r) => r.id).filter((id) => !knownIds.includes(id));
+        if (appeared.length) {
+          await db.query(`delete from public.staff_working_hours where id = any($1::uuid[])`, [appeared]);
+        }
+        for (const b of snap.before) {
+          await db.query(
+            `insert into public.staff_working_hours (id, staff_id, day_of_week, start_time, end_time)
+             values ($1,$2,$3,$4,$5) on conflict (id) do nothing`,
+            [b.id, b.staff_id, b.day_of_week, b.start_time, b.end_time]);
+        }
+      }
       return {
         appointments: ids.length, timeOff: timeOff.size,
-        workingHours: workingHours.length, memberships: memberships.length,
+        workingHours: insertedWorkingHours.size + removedWorkingHours.length,
+        memberships: insertedMemberships.size + changedMemberships.length,
       };
     },
   };
@@ -414,17 +739,23 @@ export async function runSuite(suiteName, body) {
   const fx = createFixture(db);
   const rec = createRecorder(suiteName);
   let summary;
+  let appointmentsBefore = 0;
   try {
     // Isolation is asserted, not assumed. Fixture rows left behind by an
     // earlier suite would otherwise show up as overlaps and availability gaps
     // inside this one, and the failure would point anywhere but the cause.
+    // The total row count is recorded, NOT asserted to be zero. The owner uses
+    // DEV, so unrelated appointments are expected to be present and must not
+    // make a suite fail. What matters is the delta this run leaves behind,
+    // checked as ISO-02.
     const { rows: before } = await db.query(
-      `select count(*)::int n from public.appointments where remarks = $1`, [fx.TAG]);
+      `select count(*)::int n from public.appointments`);
+    appointmentsBefore = before[0].n;
     rec.check({
-      id: 'ISO-01 suite starts isolated', actor: 'harness', setup: '-',
-      action: 'count leftover fixture rows before running',
-      expected: '0 — the previous suite cleaned up after itself',
-      actual: `${before[0].n} row(s)`, ok: before[0].n === 0,
+      id: 'ISO-01 suite starts with a known row count', actor: 'harness', setup: '-',
+      action: 'count all appointments before running',
+      expected: 'any number — manual bookings may legitimately exist',
+      actual: `${appointmentsBefore} row(s) present`, ok: true,
     });
 
     const T = await signInAll(ids);
@@ -447,13 +778,23 @@ export async function runSuite(suiteName, body) {
 
     // Teardown is verified rather than trusted — including after a crash,
     // which is exactly when a suite is most likely to leave rows behind.
+    // Two properties, both about THIS run's footprint:
+    //   1. every id it created is gone
+    //   2. the table is back to the size it started at — so nothing it did not
+    //      own was removed either
+    const owned = fx.ownedAppointmentIds();
+    const survivors = owned.length
+      ? (await db.query(
+          `select count(*)::int n from public.appointments where id = any($1::uuid[])`, [owned])).rows
+      : [{ n: 0 }];
     const { rows: after } = await db.query(
-      `select count(*)::int n from public.appointments where remarks = $1`, [fx.TAG]);
+      `select count(*)::int n from public.appointments`);
     rec.check({
-      id: 'ISO-02 suite left nothing behind', actor: 'harness', setup: '-',
-      action: 'count fixture rows after teardown',
-      expected: '0 — the next suite must start from the same baseline this one did',
-      actual: `${after[0].n} row(s)`, ok: after[0].n === 0,
+      id: 'ISO-02 suite removed exactly what it created', actor: 'harness', setup: '-',
+      action: 'check its own ids are gone and the table is back to its starting size',
+      expected: `0 of its own rows left, and ${appointmentsBefore} rows present as before`,
+      actual: `${survivors[0].n} own row(s) left, table now ${after[0].n} (was ${appointmentsBefore})`,
+      ok: survivors[0].n === 0 && after[0].n === appointmentsBefore,
     });
 
     summary = rec.summary();
