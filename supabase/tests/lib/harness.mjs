@@ -9,97 +9,52 @@
 // Every suite creates its own fixture and removes it in a finally block. No
 // suite may depend on data left behind by another suite or by an earlier run.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import pg from 'pg';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '../../..');
+import { loadEnvLocal, resolveTestTarget, assertTestTarget } from './target.mjs';
 
 // ---------------------------------------------------------------------------
 // config — never hard-code credentials; .env.local is gitignored
+//
+// Which PROJECT these values describe is decided in target.mjs, not here. That
+// separation is the point: the connection details and the permission to write
+// to that connection are answered by different code, and the permission half is
+// unit-tested (tests/unit/test-target.test.mjs) without a database.
 // ---------------------------------------------------------------------------
-function loadEnvLocal() {
-  const p = resolve(REPO, '.env.local');
-  if (!existsSync(p)) return;
-  for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && process.env[m[1]] === undefined) {
-      process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-    }
-  }
-}
 loadEnvLocal();
 
-function required(name) {
-  const v = process.env[name];
-  if (!v) {
+function required(value, name) {
+  if (!value) {
     console.error(`\nMissing ${name}.\nSet it in .env.local (gitignored) — see supabase/tests/README.md.`);
     process.exit(2);
   }
-  return v;
+  return value;
 }
+
+/** Resolved per call, so a test may exercise the resolver with its own env. */
+const T = () => resolveTestTarget();
 
 export const CONFIG = {
-  url: () => required('NEXT_PUBLIC_SUPABASE_URL').replace(/\/+$/, ''),
-  anon: () => required('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
-  testPassword: () => required('TEST_IDENTITY_PASSWORD'),
-  dbPassword: () => required('SUPABASE_DB_PASSWORD'),
-  dbHost: () => process.env.SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
-  dbUser: () => required('SUPABASE_DB_USER'),
+  mode: () => T().mode,
+  url: () => required(T().url, 'the Supabase URL for the automated-test target'),
+  anon: () => required(T().anon, 'the Supabase anon key for the automated-test target'),
+  testPassword: () => required(T().identityPassword, 'TEST_IDENTITY_PASSWORD'),
+  dbPassword: () => required(T().dbPassword, 'the database password for the automated-test target'),
+  dbHost: () => T().dbHost,
+  dbUser: () => required(T().dbUser, 'the database user for the automated-test target'),
 };
-
-/**
- * The project ref these suites are allowed to touch.
- *
- * A ref, not a hostname substring: "dev" or "test" appearing in a URL proves
- * nothing, and a production project could easily contain either word. The ref
- * identifies one specific Supabase project and nothing else.
- *
- * Kept as an allowlist so a future TEST project can be added beside DEV without
- * loosening the check into a pattern.
- */
-const TEST_SAFE_PROJECT_REFS = ['ozojfflkchltwqnbflso'];
-
-/** The ref out of a Supabase URL: https://<ref>.supabase.co */
-function projectRef(url) {
-  const m = /https?:\/\/([a-z0-9]{20})\.supabase\./i.exec(url);
-  return m ? m[1] : null;
-}
 
 /**
  * Fail-closed guard for anything that writes to the database.
  *
- * Refuses unless the target project is explicitly on the allowlist. An
- * unparseable URL, an unknown ref, or a missing ref all refuse — the default
- * answer is no, so a typo or a copied .env cannot silently point a destructive
- * suite at the wrong project.
- *
- * The old override (ALLOW_NON_DEV_TESTS=true) is deliberately gone. A plain
- * boolean escape hatch is exactly the thing that gets pasted into a shell
- * against production; allowing a new project now means adding its ref above,
- * in a reviewed diff.
+ * The implementation lives in target.mjs; this name is what every existing
+ * suite calls. It is renamed to `assertTestTarget` at the TEST cutover, when
+ * "dev project" stops being the truthful description of what it permits.
  */
-export function assertDevProject() {
-  const url = CONFIG.url();
-  const ref = projectRef(url);
-
-  if (!ref) {
-    console.error(`\nRefusing to run: cannot read a Supabase project ref from ${url}.\n` +
-      `These suites create and DELETE rows, so an unrecognised target is refused.`);
-    process.exit(2);
-  }
-  if (!TEST_SAFE_PROJECT_REFS.includes(ref)) {
-    console.error(`\nRefusing to run against project ${ref}.\n` +
-      `Only these projects are marked test-safe: ${TEST_SAFE_PROJECT_REFS.join(', ')}.\n` +
-      `These suites create and DELETE rows. To allow a new test project, add its\n` +
-      `ref to TEST_SAFE_PROJECT_REFS in supabase/tests/lib/harness.mjs.`);
-    process.exit(2);
-  }
-  return ref;
-}
+export const assertDevProject = assertTestTarget;
+export { assertTestTarget };
 
 // ---------------------------------------------------------------------------
 // HTTP helpers — real JWTs through PostgREST
