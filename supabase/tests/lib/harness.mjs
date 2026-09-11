@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import pg from 'pg';
 import { loadEnvLocal, resolveTestTarget, assertTestTarget } from './target.mjs';
+import { EMAIL_BY_KEY } from './identities.mjs';
 
 // ---------------------------------------------------------------------------
 // config — never hard-code credentials; .env.local is gitignored
@@ -39,7 +40,12 @@ const T = () => resolveTestTarget();
 export const CONFIG = {
   mode: () => T().mode,
   url: () => required(T().url, 'the Supabase URL for the automated-test target'),
-  anon: () => required(T().anon, 'the Supabase anon key for the automated-test target'),
+  // The PUBLISHABLE key: what an ordinary client holds, subject to Row Level
+  // Security exactly as the browser is. The secret key bypasses RLS and is
+  // therefore not reachable from here — a suite holding it would be asserting
+  // against a boundary it had already stepped over.
+  publishableKey: () => required(T().publishableKey,
+    'the Supabase publishable key for the automated-test target'),
   testPassword: () => required(T().identityPassword, 'TEST_IDENTITY_PASSWORD'),
   dbPassword: () => required(T().dbPassword, 'the database password for the automated-test target'),
   dbHost: () => T().dbHost,
@@ -98,7 +104,7 @@ export async function signIn(email) {
 
   const r = await fetch(`${CONFIG.url()}/auth/v1/token?grant_type=password`, {
     method: 'POST',
-    headers: { apikey: CONFIG.anon(), 'Content-Type': 'application/json' },
+    headers: { apikey: CONFIG.publishableKey(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: CONFIG.testPassword() }),
   });
   const b = await r.json();
@@ -117,7 +123,7 @@ export async function rpc(fn, token, args) {
   const r = await fetch(`${CONFIG.url()}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: {
-      apikey: CONFIG.anon(), 'Content-Type': 'application/json',
+      apikey: CONFIG.publishableKey(), 'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(args || {}),
@@ -131,7 +137,7 @@ export async function rest(path, token, init = {}) {
   const r = await fetch(`${CONFIG.url()}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: CONFIG.anon(), 'Content-Type': 'application/json',
+      apikey: CONFIG.publishableKey(), 'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers || {}),
     },
@@ -242,11 +248,9 @@ export async function resolveIdentities(db) {
       dyron: P('TEST_DYRON').id, victor: P('TEST_VICTOR').id,
     },
     staff: { jack: S('TEST_JACK').id, dyron: S('TEST_DYRON').id, victor: S('TEST_VICTOR').id },
-    email: {
-      kc: 'test-kc@mrcleanclean.dev.test', nick: 'test-nick@mrcleanclean.dev.test',
-      jack: 'test-jack@mrcleanclean.dev.test', dyron: 'test-dyron@mrcleanclean.dev.test',
-      victor: 'test-victor@mrcleanclean.dev.test',
-    },
+    // From the shared identity model, so the seeder and the suites cannot
+    // disagree about who exists.
+    email: { ...EMAIL_BY_KEY },
   };
 }
 

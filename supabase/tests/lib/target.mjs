@@ -207,11 +207,32 @@ export function evaluateTarget({
 // ---------------------------------------------------------------------------
 
 /**
+ * Variables the TEST project needs. Presence is validated; values never print.
+ *
+ * `secretKey` is deliberately absent from this list. Ordinary suites must run
+ * without it — see `requireTestSecretKey`.
+ */
+export const REQUIRED_TEST_ENV = [
+  'TEST_SUPABASE_URL',
+  'EXPECTED_TEST_PROJECT_REF',
+  'TEST_SUPABASE_PUBLISHABLE_KEY',
+  'TEST_SUPABASE_DB_HOST',
+  'TEST_SUPABASE_DB_USER',
+  'TEST_SUPABASE_DB_PASSWORD',
+  'TEST_IDENTITY_PASSWORD',
+];
+
+/**
  * The connection an automated suite should use.
  *
  * Post-cutover this is TEST_* and only TEST_*. Pre-cutover it falls back to the
  * DEV variables the suites have always used, and says so, so the intermediate
  * state is visible rather than implied.
+ *
+ * The key returned is the PUBLISHABLE key — the one an ordinary client holds,
+ * which goes through Row Level Security like the browser does. The secret key
+ * is not here on purpose: a suite that could reach it by accident would be a
+ * suite whose RLS assertions prove nothing.
  */
 export function resolveTestTarget(env = process.env) {
   const configured = Boolean(env.EXPECTED_TEST_PROJECT_REF || env.TEST_SUPABASE_URL);
@@ -219,7 +240,7 @@ export function resolveTestTarget(env = process.env) {
     return {
       mode: 'test',
       url: (env.TEST_SUPABASE_URL || '').replace(/\/+$/, ''),
-      anon: env.TEST_SUPABASE_ANON_KEY,
+      publishableKey: env.TEST_SUPABASE_PUBLISHABLE_KEY,
       dbUser: env.TEST_SUPABASE_DB_USER,
       dbHost: env.TEST_SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
       dbPassword: env.TEST_SUPABASE_DB_PASSWORD,
@@ -230,7 +251,7 @@ export function resolveTestTarget(env = process.env) {
   return {
     mode: 'legacy-dev',
     url: (env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, ''),
-    anon: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    publishableKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     dbUser: env.SUPABASE_DB_USER,
     dbHost: env.SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
     dbPassword: env.SUPABASE_DB_PASSWORD,
@@ -239,12 +260,39 @@ export function resolveTestTarget(env = process.env) {
   };
 }
 
+/**
+ * The TEST secret key, for trusted setup tooling only — Auth Admin user
+ * creation, and nothing else.
+ *
+ * Deliberately a separate call rather than a field on the target, so reaching
+ * for it is a visible act. It must never be given to a client that models a
+ * browser: it bypasses Row Level Security, which is the boundary these suites
+ * exist to test.
+ *
+ * Never NEXT_PUBLIC_*, never in a bundle, a prop, a Flight payload, a log, a
+ * report, or git.
+ */
+export function requireTestSecretKey(env = process.env) {
+  const v = env.TEST_SUPABASE_SECRET_KEY;
+  if (!v) {
+    console.error('\nMissing TEST_SUPABASE_SECRET_KEY.\n' +
+      'Only the TEST setup tooling needs it (Auth Admin user creation); it is set in\n' +
+      '.env.local, which is gitignored, and its value is never printed.');
+    process.exit(2);
+  }
+  return v;
+}
+
+/** Which of the required TEST variables are absent. Names only. */
+export function missingTestEnv(env = process.env) {
+  return REQUIRED_TEST_ENV.filter((n) => !env[n]);
+}
+
 /** DEV's connection, for read-only diagnostics only. Never for a suite. */
 export function resolveDevTarget(env = process.env) {
   return {
     mode: 'dev-readonly',
     url: (env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/+$/, ''),
-    anon: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     dbUser: env.SUPABASE_DB_USER,
     dbHost: env.SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
     dbPassword: env.SUPABASE_DB_PASSWORD,

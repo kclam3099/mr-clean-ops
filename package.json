@@ -25,6 +25,8 @@
     "test:security": "node supabase/tests/security-regression.mjs",
     "test:engine": "node supabase/tests/appointment-engine-regression.mjs",
     "test:privacy": "node supabase/tests/cross-workspace-privacy-regression.mjs",
+    "db:migrate-test": "node scripts/apply-migrations.mjs",
+    "db:seed-test": "node scripts/seed-test-project.mjs",
     "db:check-parity": "node scripts/check-migration-parity.mjs",
     "dev:inspect": "node scripts/dev-inspect.mjs",
     "db:reset-dev-fixtures": "node supabase/tests/reset-dev-fixtures.mjs"
