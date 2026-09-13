@@ -22,6 +22,7 @@ export function QuickAddFab({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [initialDate, setInitialDate] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,28 @@ export function QuickAddFab({
     return () => clearTimeout(t);
   }, [toast]);
 
+  /**
+   * Other surfaces ask for the sheet by event rather than mounting their own.
+   *
+   * The dashboard's month grid has a + on every date, and the point of Quick
+   * Add is that there is ONE of it: one parser, one review step, one save path.
+   * A second sheet rendered from the grid would be a second booking form by
+   * another name — which is exactly what this feature replaced.
+   *
+   * An event rather than a context provider because the button already lives in
+   * the shell beside {children}; a provider would mean restructuring the layout
+   * to thread state into a subtree that only needs to shout one date at it.
+   */
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const date = (e as CustomEvent<{ date?: string }>).detail?.date ?? "";
+      setInitialDate(/^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "");
+      setOpen(true);
+    };
+    window.addEventListener("quickadd:open", onOpen);
+    return () => window.removeEventListener("quickadd:open", onOpen);
+  }, []);
+
   if (SUPPRESSED.includes(pathname)) return null;
 
   return (
@@ -37,7 +60,7 @@ export function QuickAddFab({
       {open ? null : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => { setInitialDate(""); setOpen(true); }}
           aria-label="New appointment"
           className="fixed bottom-6 right-6 z-40 flex h-14 items-center gap-2 rounded-full bg-slate-900
                      px-5 text-white shadow-lg transition hover:bg-slate-800
@@ -54,7 +77,8 @@ export function QuickAddFab({
       {open ? (
         <QuickAddSheet
           businessNow={businessNow}
-          onClose={() => setOpen(false)}
+          initialDate={initialDate}
+          onClose={() => { setOpen(false); setInitialDate(""); }}
           onSuccess={(message) => setToast(message)}
         />
       ) : null}

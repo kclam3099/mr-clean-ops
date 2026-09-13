@@ -41,3 +41,19 @@ export function formatDuration(minutes: number): string {
 export function formatMoney(amount: number): string {
   return `RM${amount.toFixed(2)}`;
 }
+
+/**
+ * Money for a dense calendar cell: "RM480", or "RM480.50" when the sen matter.
+ *
+ * Two decimals on every entry costs about four characters of width in a cell
+ * that has roughly twenty, and the customer total is almost always whole.
+ * Thousands are grouped, because "RM6,240" is read at a glance and "RM6240" is
+ * counted.
+ */
+export function compactMoney(amount: number): string {
+  const whole = Math.round(amount * 100) % 100 === 0;
+  return `RM${amount.toLocaleString("en-MY", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}

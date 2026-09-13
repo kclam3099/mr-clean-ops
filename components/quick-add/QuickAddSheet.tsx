@@ -60,9 +60,9 @@ const FIELD_MAP: Record<ParsedField, keyof Details | "items"> = {
   areaCity: "areaCity", date: "apptDate", time: "startTime", items: "items",
 };
 
-const emptyDetails = (): Details => ({
+const emptyDetails = (apptDate = ""): Details => ({
   customerName: "", customerPhone: "", addressLine: "", areaCity: "",
-  apptDate: "", startTime: "", remarks: "", items: [initialItemRow()],
+  apptDate, startTime: "", remarks: "", items: [initialItemRow()],
 });
 
 function detailsFromParsed(p: ParsedMessage): Details {
@@ -87,11 +87,19 @@ function detailsFromParsed(p: ParsedMessage): Details {
 
 export function QuickAddSheet({
   businessNow,
+  initialDate = "",
   onClose,
   onSuccess,
 }: {
   /** Business-local "YYYY-MM-DDTHH:MM", for the past-appointment prompt. */
   businessNow: string;
+  /**
+   * "YYYY-MM-DD" to start from, when the sheet was opened from a date — a month
+   * cell, say. A pasted message still wins: the message is the source of truth
+   * for what was actually agreed with the customer, and silently keeping the
+   * cell's date would quietly book the wrong day.
+   */
+  initialDate?: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }) {
@@ -99,7 +107,7 @@ export function QuickAddSheet({
   const [context, setContext] = useState<QuickAddContext | null>(null);
   const [step, setStep] = useState<Step>("paste");
   const [rawText, setRawText] = useState("");
-  const [details, setDetails] = useState<Details>(emptyDetails);
+  const [details, setDetails] = useState<Details>(() => emptyDetails(initialDate));
   const [confirmations, setConfirmations] = useState<ParsedField[]>([]);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [error, setError] = useState<AppError | null>(null);
@@ -336,7 +344,7 @@ export function QuickAddSheet({
                   value={rawText}
                   disabled={pending}
                   onDetect={detect}
-                  onManual={() => { setDetails(emptyDetails()); setStep("details"); }}
+                  onManual={() => { setDetails(emptyDetails(initialDate)); setStep("details"); }}
                 />
               ) : null}
 

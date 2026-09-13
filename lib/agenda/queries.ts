@@ -210,6 +210,58 @@ export function singleDay(isoDate: string): DateRange {
   return { from: isoDate, to: isoDate };
 }
 
+/** `isoDate` moved by whole months, clamped to the end of a shorter month. */
+export function addMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const target = new Date(Date.UTC(y as number, (m as number) - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  const day = Math.min(d as number, lastDay);
+  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * The dates a month CALENDAR shows: six Sunday-anchored weeks containing the
+ * whole of `isoDate`'s month, leading and trailing days included.
+ *
+ * Six rows always, even when five would hold the month, so the grid does not
+ * change height as you page through months — a dashboard that reflows on every
+ * click is harder to read than one with a little empty space at the bottom.
+ *
+ * This is what the month query asks for, so exactly the visible cells are
+ * fetched and nothing beyond them. Deliberately NOT `weekRange`, which is
+ * Monday-anchored for the scheduling calendar.
+ */
+export function monthGridRange(isoDate: string): DateRange {
+  const [y, m] = isoDate.split("-").map(Number);
+  const first = `${y}-${String(m).padStart(2, "0")}-01`;
+  const dow = new Date(Date.UTC(y as number, (m as number) - 1, 1)).getUTCDay(); // 0 = Sunday
+  const from = addDays(first, -dow);
+  return { from, to: addDays(from, 41) };
+}
+
+/** Every date in a month grid, in order. */
+export function monthGridDays(isoDate: string): string[] {
+  const { from } = monthGridRange(isoDate);
+  return Array.from({ length: 42 }, (_, i) => addDays(from, i));
+}
+
+/** "2026-09-11" -> "2026-09", the month-navigation parameter. */
+export function monthKey(isoDate: string): string {
+  return isoDate.slice(0, 7);
+}
+
+/** "2026-09-11" -> "September 2026". */
+export function monthLabel(isoDate: string): string {
+  const [y, m] = isoDate.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+    .format(new Date(Date.UTC(y as number, (m as number) - 1, 1)));
+}
+
+/** True when both dates fall in the same calendar month. */
+export function sameMonth(a: string, b: string): boolean {
+  return a.slice(0, 7) === b.slice(0, 7);
+}
+
 function toMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return (h as number) * 60 + (m as number);
