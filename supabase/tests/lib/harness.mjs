@@ -163,9 +163,37 @@ export async function adminClient() {
 // ---------------------------------------------------------------------------
 // result recording
 // ---------------------------------------------------------------------------
+/**
+ * Records checks, and refuses to let an incomplete run look complete.
+ *
+ * The reason this is not just a counter: the F2 suite once reported
+ * "31 PASS / 0 FAIL" while fifteen of its checks had never executed. A fixture
+ * threw halfway through, the exception escaped the try, and `finally` printed a
+ * summary that was accurate about what ran and silent about what did not. Zero
+ * failures, zero skips, and a property nobody had tested.
+ *
+ * So a suite now DECLARES how many checks it intends to run, and a run that
+ * reaches a different number fails — whatever the pass/fail tally says. The
+ * summary reports PLANNED, EXECUTED, PASS, FAIL and SKIP, and the invariant
+ * EXECUTED = PASS + FAIL + SKIP is asserted rather than assumed.
+ */
 export function createRecorder(suiteName) {
   const results = [];
   let pass = 0, fail = 0, securityFail = 0, skipped = 0;
+  let planned = null;
+  let abort = null;
+
+  /**
+   * How many checks this suite intends to reach.
+   *
+   * Deliberately a number someone has to maintain. Adding a check without
+   * updating it fails the suite, which is a two-second fix; NOT having it let a
+   * suite lose a third of its coverage silently for an unknown number of runs.
+   */
+  function plan(n) {
+    planned = n;
+    return n;
+  }
 
   function check({ id, actor = '-', setup = '-', action, expected, actual, ok, security = false }) {
     if (ok) {
@@ -196,9 +224,60 @@ export function createRecorder(suiteName) {
     return false;
   }
 
+  /**
+   * An exception escaped the suite body.
+   *
+   * Recorded rather than rethrown, so cleanup still runs and the summary is
+   * still printed — but the run can no longer be green, and the summary says
+   * where it stopped.
+   */
+  function aborted(error) {
+    abort = error instanceof Error ? error : new Error(String(error));
+    return abort;
+  }
+
+  function counts() {
+    const executed = pass + fail + skipped;
+    return { planned, executed, pass, fail, skipped, securityFail, aborted: abort };
+  }
+
   function summary() {
-    console.log(`\n########## ${suiteName}: ${pass} PASS / ${fail} FAIL` +
-      `${skipped ? ` / ${skipped} SKIPPED` : ''} (security failures: ${securityFail}) ##########`);
+    const executed = pass + fail + skipped;
+
+    // The invariant, asserted rather than trusted. If this ever trips, the
+    // recorder itself is miscounting and every number below is suspect.
+    if (executed !== results.length) {
+      console.log(`\n!!! recorder inconsistent: ${executed} counted, ${results.length} recorded`);
+    }
+
+    const shortfall = planned !== null && executed !== planned;
+
+    console.log(`\n########## ${suiteName} ##########`);
+    console.log(`  PLANNED  ${planned === null ? '(not declared)' : planned}`);
+    console.log(`  EXECUTED ${executed}`);
+    console.log(`  PASS     ${pass}`);
+    console.log(`  FAIL     ${fail}${securityFail ? ` (security: ${securityFail})` : ''}`);
+    console.log(`  SKIP     ${skipped}`);
+
+    if (abort) {
+      console.log(`\n!!! RUN ABORTED — an exception escaped the suite body.`);
+      console.log(`    ${abort.message}`);
+      if (abort.stack) {
+        const at = abort.stack.split('\n').find(l => l.includes('.test.mjs') || l.includes('.mjs:'));
+        if (at) console.log(`   ${at.trim()}`);
+      }
+      console.log(`    Checks after that point did not run. This result is NOT a pass.`);
+    }
+
+    if (shortfall) {
+      console.log(`\n!!! PLANNED != EXECUTED (${planned} planned, ${executed} executed).`);
+      console.log(abort
+        ? `    The run stopped early; see the abort above.`
+        : `    Nothing threw, so either a branch was skipped silently or the plan is stale.\n` +
+          `    Do not "fix" this by changing the planned number to match — find the\n` +
+          `    checks that did not run.`);
+    }
+
     if (skipped) {
       console.log('\nSKIPPED (not counted as passes):');
       for (const s of results.filter(r => r.skipped)) console.log(`  ${s.id} — ${s.reason}`);
@@ -212,10 +291,32 @@ export function createRecorder(suiteName) {
         console.log(`      actual  : ${f.actual}`);
       }
     }
-    return { suite: suiteName, pass, fail, securityFail, skipped, results };
+
+    const green = fail === 0 && !abort && !shortfall;
+    console.log(`\n${green ? 'SUITE OK' : 'SUITE FAILED'} — ${suiteName}`);
+    return { suite: suiteName, planned, executed, pass, fail, securityFail, skipped, aborted: abort, green, results };
   }
 
-  return { check, skip, summary, get counts() { return { pass, fail, securityFail, skipped }; } };
+  /**
+   * Print the summary and set the process exit code. The ONLY supported way for
+   * a suite to end.
+   *
+   * Suites used to end with `process.exitCode = summary.fail === 0 ? 0 : 1`,
+   * which is green for a run that aborted before its first failure could
+   * happen. Deciding the exit code here means no suite can get it wrong, and
+   * the three reasons to fail — a failed check, an escaped exception, a
+   * shortfall against the plan — are applied uniformly.
+   */
+  function finish() {
+    const s = summary();
+    process.exitCode = s.green ? 0 : 1;
+    return s;
+  }
+
+  return {
+    plan, check, skip, aborted, summary, finish,
+    get counts() { return counts(); },
+  };
 }
 
 // ---------------------------------------------------------------------------

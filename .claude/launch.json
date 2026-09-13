@@ -5,7 +5,13 @@
       "name": "mr-clean-ops",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "port": 3100
+    },
+    {
+      "name": "mr-clean-ops-qa",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--webpack", "-p", "3101", "-H", "127.0.0.1"],
+      "port": 3101
     }
   ]
 }

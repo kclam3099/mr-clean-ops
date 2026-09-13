@@ -23,6 +23,13 @@ const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);
 const rec = createRecorder("F5 CALENDAR + AVAILABILITY (browser)");
+// How many checks this suite intends to reach. A run that reaches a different
+// number fails, whatever the pass tally says: F2 once reported 31 PASS / 0 FAIL
+// with fifteen checks never executed, because a fixture threw and the summary
+// only described what had run. Adding or removing a check means updating this
+// number — deliberately, in the same diff.
+rec.plan(43);
+
 
 const KC_ONLY = [
   ["Victor name", "TEST_VICTOR"],
@@ -427,16 +434,36 @@ try {
     const before = await readMessage(page);
 
     // Which weekday does the message offer at 10am, and what date is that?
+    // The message offers a time when ANY staff member is free — that union is
+    // the whole privacy design. So "the message offers 10am" does NOT mean Jack
+    // is free at 10am; it may be Dyron who is. Taking the first offered day and
+    // booking Jack on it failed with PHYSICAL_OVERLAP, and the check then
+    // reported "10am disappeared", which reads exactly like the pass it was not.
+    //
+    // So walk every (day, time) the message actually offers and take the first
+    // pair where Dyron AND Jack are both genuinely free. Fixing on "10am" left
+    // the check unrunnable once the suite's earlier fixtures had taken that hour
+    // all week — two CRITICAL security checks skipping is barely better than
+    // them failing for the wrong reason.
     const ZH = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"];
+    const TIMES = [["10am", "10:00"], ["1pm", "13:00"], ["3pm", "15:00"]];
     const lines = before.split("\n");
-    let zh = null;
+
+    const offered = [];
     for (let i = 0; i < lines.length; i++) {
-      if (ZH.includes(lines[i]) && (lines[i + 1] ?? "").includes("10am")) { zh = lines[i]; break; }
+      if (!ZH.includes(lines[i])) continue;
+      const times = lines[i + 1] ?? "";
+      for (const [label, hhmm] of TIMES) {
+        if (times.includes(label)) offered.push({ day: lines[i], label, hhmm });
+      }
     }
 
+    let zh = null;
     let hiddenDate = null;
-    if (zh) {
-      const isoDow = ZH.indexOf(zh) + 1;   // 1 = Monday, matching to_char(..., 'ID')
+    let hiddenTime = null;
+    let hiddenLabel = null;
+    for (const candidate of offered) {
+      const isoDow = ZH.indexOf(candidate.day) + 1;   // 1 = Monday, matching to_char(..., 'ID')
       const found = await fx.query(
         `select to_char(d, 'YYYY-MM-DD') dt
            from generate_series(
@@ -444,15 +471,28 @@ try {
                   (date_trunc('week', (now() at time zone 'Asia/Kuala_Lumpur')::date)::date + 6),
                   interval '1 day') d
           where to_char(d, 'ID')::int = $1
-          limit 1`, [isoDow]);
-      hiddenDate = found.length ? found[0].dt : null;
+            and not exists (
+                  select 1 from public.appointments a
+                   where a.appt_date = d::date
+                     and a.staff_id = any($2::uuid[])
+                     and a.status <> 'cancelled'
+                     and a.start_time <= $3::time
+                     and (a.start_time + make_interval(mins => a.final_duration_min)) > $3::time)
+          limit 1`, [isoDow, [ids.staff.dyron, ids.staff.jack], candidate.hhmm]);
+      if (found.length) {
+        zh = candidate.day;
+        hiddenDate = found[0].dt;
+        hiddenTime = candidate.hhmm;
+        hiddenLabel = candidate.label;
+        break;
+      }
     }
 
     if (!hiddenDate) {
       rec.skip({
         id: "AVL-10 a hidden appointment removes the time (CRITICAL)", actor: "NICK",
-        reason: "the customer message offers no 10am slot this week, so there is no time to remove "
-              + "(the same privacy property is asserted by AVL-04 and AVL-11)",
+        reason: "no day this week offers any slot with BOTH Dyron and Jack free, so the union "
+              + "rule cannot be exercised here (AVL-04 asserts the same privacy property)",
       });
       rec.skip({
         id: "AVL-11 the removal explains nothing (CRITICAL)", actor: "NICK",
@@ -465,11 +505,11 @@ try {
     // Dyron in the open, Jack hidden — both at 10:00, so the union rule cannot
     // keep the slot alive.
     const dyronJob = await rpc("create_appointment", kcToken, bookingArgs({
-      ws: ids.ws.shared, staff: ids.staff.dyron, date: hiddenDate, time: "10:00",
+      ws: ids.ws.shared, staff: ids.staff.dyron, date: hiddenDate, time: hiddenTime,
       amount: 200, remarks: fx.TAG, confirmPast: undefined }));
     if (dyronJob.ok) fx.track(dyronJob.body);
     const hidden = await rpc("create_appointment", kcToken, bookingArgs({
-      ws: ids.ws.private, staff: ids.staff.jack, date: hiddenDate, time: "10:00", amount: 200,
+      ws: ids.ws.private, staff: ids.staff.jack, date: hiddenDate, time: hiddenTime, amount: 200,
       remarks: fx.TAG, customer: SYNTHETIC_PRIVATE_CUSTOMER }));
     if (hidden.ok) fx.track(hidden.body);
 
@@ -482,12 +522,16 @@ try {
 
     rec.check({
       id: "AVL-10 a hidden appointment removes the time (CRITICAL)", actor: "NICK",
-      setup: `Dyron booked openly and Jack booked privately, both 10:00 on ${hiddenDate}`,
+      setup: `Dyron booked openly and Jack booked privately, both ${hiddenTime} on ${hiddenDate}`,
       action: "compare that weekday's times before and after",
-      expected: "10am disappears",
-      actual: `before "${dayTimes(before)}" after "${dayTimes(after)}"`,
+      expected: `${hiddenLabel} disappears`,
+      // The booking outcomes are part of the evidence: this check failed once
+      // with "10am disappeared" in the actual column, which reads like a pass,
+      // because one of the two fixtures had silently not been created.
+      actual: `dyron=${dyronJob.ok ? "ok" : dyronJob.msg} hidden=${hidden.ok ? "ok" : hidden.msg} `
+            + `before "${dayTimes(before)}" after "${dayTimes(after)}"`,
       ok: dyronJob.ok && hidden.ok
-          && dayTimes(before).includes("10am") && !dayTimes(after).includes("10am"),
+          && dayTimes(before).includes(hiddenLabel) && !dayTimes(after).includes(hiddenLabel),
       security: true,
     });
 
@@ -560,12 +604,18 @@ try {
     }
     await ctx.close();
   }
+} catch (e) {
+  // An exception that escapes the body must not vanish into a green summary.
+  // Recorded here, so cleanup still runs and the verdict still prints — but the
+  // run is no longer a pass. See tests/unit/harness-accounting.test.mjs.
+  rec.aborted(e);
 } finally {
-  const summary = rec.summary();
   if (browser) await browser.close();
   await fx.cleanup();
   await db.end();
-  process.exitCode = summary.fail === 0 ? 0 : 1;
+  // Summary LAST, and it owns the exit code: a failed check, an escaped
+  // exception, or fewer checks than planned each make this non-zero.
+  rec.finish();
 }
 
 async function assertAppIsUp() {

@@ -25,6 +25,13 @@ const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);
 const rec = createRecorder("F2 ADD APPOINTMENT (browser)");
+// How many checks this suite intends to reach. A run that reaches a different
+// number fails, whatever the pass tally says: F2 once reported 31 PASS / 0 FAIL
+// with fifteen checks never executed, because a fixture threw and the summary
+// only described what had run. Adding or removing a check means updating this
+// number — deliberately, in the same diff.
+rec.plan(46);
+
 
 let browser;
 try {
@@ -353,7 +360,10 @@ try {
     await page.goto(`${BASE}/appointments/new`, { waitUntil: "load" });
     await page.waitForSelector("#staffId");
     await page.selectOption("#staffId", { label: "TEST_JACK" });
-    await page.fill("#apptDate", await day(3));
+    // A day Jack is actually free on: the check below asserts what an EMPTY
+    // day offers, so a day with a booking on it tests nothing.
+    const dSuggest = await fx.freeDate(ids.staff.jack, { offsetDays: 3 });
+    await page.fill("#apptDate", dSuggest);
     await page.waitForTimeout(1500);
 
     const before = calls.length;
@@ -361,7 +371,7 @@ try {
       [...document.querySelectorAll("button[aria-pressed]")]
         .map((b) => b.textContent.trim()).filter((t) => /^\d{2}:\d{2}$/.test(t)));
     rec.check({
-      id: "AVAIL-01 standard suggestions render", actor: "NICK", setup: "empty day",
+      id: "AVAIL-01 standard suggestions render", actor: "NICK", setup: `empty day ${dSuggest}`,
       action: "read the suggestion chips",
       expected: "the configured slots 10:00 / 13:00 / 15:00",
       actual: chips.join(", ") || "(none)",
@@ -422,7 +432,17 @@ try {
         customer: "F2 REDIRECT PROBE", items: [["X", "1", "200"]],
       });
       await page.waitForTimeout(1200);
-      landed.push(new URL(page.url()).origin + new URL(page.url()).pathname);
+      const path = new URL(page.url()).origin + new URL(page.url()).pathname;
+      // Staying on the form means the SAVE failed, which is a fixture problem
+      // wearing a redirect defect's clothes. Capture why, so the next person
+      // does not have to reproduce it to find out.
+      const why = path.endsWith("/appointments/new")
+        ? await page.evaluate(() => {
+            const el = document.querySelector('[role="alert"], [data-error], .text-red-600, .text-rose-600');
+            return el ? el.textContent.replace(/\s+/g, " ").trim().slice(0, 120) : "(no error shown)";
+          })
+        : null;
+      landed.push(why ? `${path} <- ${why}` : path);
       if (id) await cancelById(fx, id);
       // Each iteration books the same slot, so free it before the next one —
       // by the id THIS iteration created, never by customer name.
@@ -448,7 +468,7 @@ try {
   // 5b. Override, past dates, double submit
   // =========================================================================
   {
-    const dOverride = await day(5);
+    const dOverride = await fx.freeDate(ids.staff.dyron, { offsetDays: 5 });
 
     // KC creates a RM800 large job, then books a later slot the same day. The
     // second booking must be refused with LARGE_JOB_OVERRIDE_REQUIRED and the
@@ -520,7 +540,11 @@ try {
     // Tracked by exact row id and restored at teardown.
     await fx.setMembership(ids.staff.jack, ids.ws.private, true);
 
-    const dHidden = await day(8);
+    // This was day(8). The redirect probe above walks forward from day(4)
+    // looking for free dates, five times, so on a busy week it reaches day(8)
+    // first — and this insert then violated no_overlapping_staff_bookings,
+    // threw out of the suite body, and took fifteen later checks with it.
+    const dHidden = await fx.freeDate(ids.staff.jack, { offsetDays: 8 });
     const hiddenIns = await db.query(
       `insert into public.appointments (workspace_id,staff_id,customer_name,customer_phone,
          address_line,area_city,appt_date,start_time,calculated_duration_min,final_duration_min,
@@ -663,7 +687,7 @@ try {
     await k.page.fill("input[name='items.0.description']", "X");
     await k.page.fill("input[name='items.0.quantity']", "1");
     await k.page.fill("input[name='items.0.unitPrice']", "200");
-    await k.page.fill("#apptDate", await day(9));
+    await k.page.fill("#apptDate", await fx.freeDate(ids.staff.dyron, { offsetDays: 9 }));
     await k.page.waitForTimeout(900);
     await k.page.fill("#startTime", "10:00");
     // Let React re-render so Save is genuinely enabled. Clicking a disabled
@@ -701,7 +725,7 @@ try {
   // produce a field-level message instead.
   {
     const { page, ctx } = await session(ids.email.kc);
-    const dValidation = await day(10);
+    const dValidation = await fx.freeDate(ids.staff.dyron, { offsetDays: 10 });
 
     for (const blank of ["customerName", "customerPhone", "addressLine", "areaCity"]) {
       await page.goto(`${BASE}/appointments/new`, { waitUntil: "load" });
@@ -795,8 +819,13 @@ try {
     });
     await ctx.close();
   }
+} catch (e) {
+  // An exception that escapes the body used to vanish: `finally` printed a
+  // summary of whatever had run, and a suite that lost fifteen checks to a
+  // fixture collision reported "31 PASS / 0 FAIL". Recording it here keeps
+  // cleanup running while making the run impossible to mistake for a pass.
+  rec.aborted(e);
 } finally {
-  const summary = rec.summary();
   if (browser) await browser.close();
   // Take ownership of rows that APPEARED while this suite ran, then delete by
   // exact id. A manual booking matching the same pattern existed at baseline
@@ -806,7 +835,9 @@ try {
   console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
     + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
-  process.exitCode = summary.fail === 0 ? 0 : 1;
+  // Summary LAST, and it owns the exit code: a failed check, an escaped
+  // exception, or fewer checks than planned each make this non-zero.
+  rec.finish();
 }
 
 // ---------------------------------------------------------------------------

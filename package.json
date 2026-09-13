@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack -p 3100 -H 127.0.0.1",
+    "dev:qa": "next dev --webpack -p 3101 -H 127.0.0.1",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build --webpack",
     "start": "next start -p 3100 -H 127.0.0.1",
     "lint": "eslint",

@@ -30,6 +30,13 @@ const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);
 const rec = createRecorder("RESPONSIVE / UX QA (browser)");
+// How many checks this suite intends to reach. A run that reaches a different
+// number fails, whatever the pass tally says: F2 once reported 31 PASS / 0 FAIL
+// with fifteen checks never executed, because a fixture threw and the summary
+// only described what had run. Adding or removing a check means updating this
+// number — deliberately, in the same diff.
+rec.plan(65);
+
 
 let browser;
 try {
@@ -270,8 +277,12 @@ try {
   // /dashboard now renders compact rows, and their density and responsiveness
   // are measured at four widths in tests/e2e/dashboard-scope.test.mjs.
 
+} catch (e) {
+  // An exception that escapes the body must not vanish into a green summary.
+  // Recorded here, so cleanup still runs and the verdict still prints — but the
+  // run is no longer a pass. See tests/unit/harness-accounting.test.mjs.
+  rec.aborted(e);
 } finally {
-  const summary = rec.summary();
   if (browser) await browser.close();
   // Take ownership of rows that APPEARED while this suite ran, then delete by
   // exact id. A manual booking matching the same pattern existed at baseline
@@ -281,7 +292,9 @@ try {
   console.log(`fixture cleanup: ${removed.appointments} appointment(s) owned by this run `
     + `(${adopted} adopted from the UI), manual rows untouched`);
   await db.end();
-  process.exitCode = summary.fail === 0 ? 0 : 1;
+  // Summary LAST, and it owns the exit code: a failed check, an escaped
+  // exception, or fewer checks than planned each make this non-zero.
+  rec.finish();
 }
 
 async function assertAppIsUp() {

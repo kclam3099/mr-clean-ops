@@ -34,6 +34,13 @@ const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);
 const rec = createRecorder("CROSS-USER RSC PRIVACY (browser)");
+// How many checks this suite intends to reach. A run that reaches a different
+// number fails, whatever the pass tally says: F2 once reported 31 PASS / 0 FAIL
+// with fifteen checks never executed, because a fixture threw and the summary
+// only described what had run. Adding or removing a check means updating this
+// number — deliberately, in the same diff.
+rec.plan(24);
+
 
 let browser;
 try {
@@ -313,13 +320,19 @@ try {
     }
   }
 
+} catch (e) {
+  // An exception that escapes the body must not vanish into a green summary.
+  // Recorded here, so cleanup still runs and the verdict still prints — but the
+  // run is no longer a pass. See tests/unit/harness-accounting.test.mjs.
+  rec.aborted(e);
 } finally {
-  const summary = rec.summary();
   if (browser) await browser.close();
   const removed = await fx.cleanup();
   console.log(`fixture cleanup: ${removed.appointments} appointments`);
   await db.end();
-  process.exitCode = summary.fail === 0 ? 0 : 1;
+  // Summary LAST, and it owns the exit code: a failed check, an escaped
+  // exception, or fewer checks than planned each make this non-zero.
+  rec.finish();
 }
 
 // ---------------------------------------------------------------------------
