@@ -235,8 +235,12 @@ export const REQUIRED_TEST_ENV = [
  * suite whose RLS assertions prove nothing.
  */
 export function resolveTestTarget(env = process.env) {
-  const configured = Boolean(env.EXPECTED_TEST_PROJECT_REF || env.TEST_SUPABASE_URL);
-  if (configured || TEST_PROJECT_REQUIRED) {
+  // The CUTOVER decides this, not the presence of values. Filling TEST_* into
+  // .env.local must never silently move a suite from one project to another:
+  // the values arriving is a configuration event, moving the suites is a
+  // reviewed one. (This was briefly the other way round, and the symptom was a
+  // suite refusing mid-run because someone had pasted their new keys in.)
+  if (TEST_PROJECT_REQUIRED) {
     return {
       mode: 'test',
       url: (env.TEST_SUPABASE_URL || '').replace(/\/+$/, ''),
@@ -256,7 +260,10 @@ export function resolveTestTarget(env = process.env) {
     dbHost: env.SUPABASE_DB_HOST || 'aws-0-ap-southeast-1.pooler.supabase.com',
     dbPassword: env.SUPABASE_DB_PASSWORD,
     identityPassword: env.TEST_IDENTITY_PASSWORD,
-    expectedRef: env.EXPECTED_TEST_PROJECT_REF,
+    // No claim. EXPECTED_TEST_PROJECT_REF describes TEST, and this is not it —
+    // carrying it here would make every pre-cutover run fail as a MISMATCH the
+    // moment someone configured TEST. The allowlist is what guards this branch.
+    expectedRef: undefined,
   };
 }
 

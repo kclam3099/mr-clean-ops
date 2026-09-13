@@ -14,6 +14,7 @@ import { test } from "node:test";
 import {
   projectRef, evaluateTarget,
   TEST_SAFE_PROJECT_REFS, WIPEABLE_PROJECT_REFS, DEV_PROJECT_REF, TEST_PROJECT_REQUIRED,
+  resolveTestTarget, REQUIRED_TEST_ENV, missingTestEnv,
 } from "../../supabase/tests/lib/target.mjs";
 
 const DEV = "ozojfflkchltwqnbflso";
@@ -185,6 +186,34 @@ test("wipeable is a subset of test-safe", () => {
 test("DEV is never wipeable", () => {
   assert.ok(!WIPEABLE_PROJECT_REFS.includes(DEV_PROJECT_REF),
     "DEV is on the wipeable list. It holds the owner's real bookings.");
+});
+
+test("filling in TEST_* does not move the suites on its own", () => {
+  // Configuration arriving is not the same event as cutting over. A suite that
+  // changed project the moment someone pasted keys into .env.local would move
+  // targets without anyone deciding to.
+  const env = {
+    TEST_SUPABASE_URL: url(TST), EXPECTED_TEST_PROJECT_REF: TST,
+    TEST_SUPABASE_PUBLISHABLE_KEY: "x", TEST_SUPABASE_DB_USER: "u",
+    TEST_SUPABASE_DB_PASSWORD: "p", TEST_IDENTITY_PASSWORD: "p",
+    NEXT_PUBLIC_SUPABASE_URL: url(DEV), NEXT_PUBLIC_SUPABASE_ANON_KEY: "a",
+    SUPABASE_DB_USER: "u", SUPABASE_DB_PASSWORD: "p",
+  };
+  const t = resolveTestTarget(env);
+  assert.equal(t.mode, TEST_PROJECT_REQUIRED ? "test" : "legacy-dev");
+  assert.equal(t.url, TEST_PROJECT_REQUIRED ? url(TST) : url(DEV));
+});
+
+test("the required TEST variables are named, and the secret key is not one of them", () => {
+  // An ordinary suite must run without the RLS-bypassing key. If it were
+  // required, every suite would hold it, and every RLS assertion would be made
+  // from the wrong side of the boundary.
+  assert.ok(REQUIRED_TEST_ENV.includes("TEST_SUPABASE_PUBLISHABLE_KEY"));
+  assert.ok(REQUIRED_TEST_ENV.includes("EXPECTED_TEST_PROJECT_REF"));
+  assert.ok(!REQUIRED_TEST_ENV.includes("TEST_SUPABASE_SECRET_KEY"));
+  assert.deepEqual(missingTestEnv({}), REQUIRED_TEST_ENV);
+  assert.deepEqual(
+    missingTestEnv(Object.fromEntries(REQUIRED_TEST_ENV.map((n) => [n, "x"]))), []);
 });
 
 test("once TEST is required, DEV is on neither list", () => {
