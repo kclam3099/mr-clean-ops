@@ -45,12 +45,13 @@ export function loadEnvLocal(env = process.env) {
 /**
  * Projects an automated suite may create and DELETE rows in.
  *
- * DEV is on this list only until the dedicated TEST project exists. The cutover
- * commit removes it, after which a destructive suite is physically incapable of
- * resolving DEV: not discouraged from it, incapable of it.
+ * The cutover has happened. DEV is off this list, so a destructive suite is now
+ * physically incapable of resolving it: not discouraged from it, incapable of
+ * it. Putting DEV back here would hand the suites the owner's real bookings
+ * again, which is why it is a code change and not a setting.
  */
 export const TEST_SAFE_PROJECT_REFS = [
-  'ozojfflkchltwqnbflso', // DEV — removed at cutover, see docs/DEV-TEST-SEPARATION.md
+  'txidkrvxlinapxxyopvj', // TEST (mr-clean-ops-test), Singapore
 ];
 
 /**
@@ -61,21 +62,21 @@ export const TEST_SAFE_PROJECT_REFS = [
  * table. DEV must never appear here. Production must never appear here, and
  * cannot be put here by an environment variable — only by editing this file.
  */
-export const WIPEABLE_PROJECT_REFS = [];
+export const WIPEABLE_PROJECT_REFS = [
+  'txidkrvxlinapxxyopvj', // TEST only. Never DEV. Never production.
+];
 
 /** DEV, named so a refusal can say which project it refused and why. */
 export const DEV_PROJECT_REF = 'ozojfflkchltwqnbflso';
 
 /**
- * Flipped to true in the cutover commit, once the TEST project exists.
+ * True since the cutover: the TEST project exists and the suites use it.
  *
- * While false, suites resolve the legacy DEV variables and the allowlist above
- * is what protects them. Once true there is no fallback at all: TEST_SUPABASE_*
- * and EXPECTED_TEST_PROJECT_REF become mandatory, and a machine that has not
- * been configured for TEST runs nothing rather than quietly running against the
- * owner's data.
+ * There is no fallback any more. TEST_SUPABASE_* and EXPECTED_TEST_PROJECT_REF
+ * are mandatory, so a machine that has not been configured for TEST runs
+ * nothing rather than quietly running against the owner's data.
  */
-export const TEST_PROJECT_REQUIRED = false;
+export const TEST_PROJECT_REQUIRED = true;
 
 /**
  * Overrides that are not honoured — including ones that never existed.
