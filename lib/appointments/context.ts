@@ -60,7 +60,16 @@ export async function resolveBookingContext(
       .filter((m) => (isMaster ? true : m.staff_id === selfStaffId))
       .map((m) => ({ id: m.staff_id, name: staffById.get(m.staff_id) ?? "" }))
       // A membership whose staff row is invisible or inactive is not bookable.
-      .filter((s) => s.name !== "");
+      .filter((s) => s.name !== "")
+      // Sorted, because unsorted meant "whatever order Postgres returned the
+      // membership rows in" — which is not stable across databases and not
+      // even guaranteed stable within one. That is a reshuffling dropdown, and
+      // it also weakens the indistinguishability check next to it: two loads
+      // that differ only in order are visibly different, so an assertion that
+      // Nick's page looks identical for Victor's uuid and a random one had to
+      // either fail or stop comparing order. Ordering by name lets it keep
+      // comparing order, which is the stricter test.
+      .sort((a, b) => a.name.localeCompare(b.name));
     return { id: w.id, name: w.name, staff: members };
   })
     // Never offer a workspace with nobody bookable in it.
