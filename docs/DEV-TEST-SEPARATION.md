@@ -121,15 +121,18 @@ and — once the cutover switch is flipped — DEV on neither list.
 `TEST_PROJECT_REQUIRED` in `supabase/tests/lib/target.mjs` is one boolean with
 one job: it marks the moment the TEST project exists.
 
-While **false** (today) the suites resolve the legacy DEV variables and the
-allowlist is what protects them — the state the QA hardening left behind, which
-runs green.
-
-Once **true**: `TEST_SUPABASE_*` and `EXPECTED_TEST_PROJECT_REF` become
-mandatory, there is no fallback, DEV comes off both allowlists, and a machine
-that has not been configured for TEST runs *nothing* rather than quietly running
+It is now **true**. `TEST_SUPABASE_*` and `EXPECTED_TEST_PROJECT_REF` are
+mandatory, there is no fallback, DEV is off both allowlists, and a machine that
+has not been configured for TEST runs *nothing* rather than quietly running
 against the owner's data. The unit test refuses to pass if the switch is flipped
 without removing DEV, so the switch enforces its own precondition.
+
+One thing the switch deliberately does *not* control: which project the
+provisioning tooling addresses. `resolveTestTarget()` answers "where should a
+suite run" and follows the switch; `resolveDeclaredTestProject()` answers "which
+project IS Test" and always reads `TEST_*`. Migrating and seeding must happen
+while the suites are still pointed elsewhere, so tying them to the switch would
+have meant flipping it on an empty schema and calling that reviewed.
 
 ---
 
@@ -139,23 +142,25 @@ without removing DEV, so the switch enforces its own precondition.
 | --- | --- | --- |
 | 1 | target resolution, guards, two allowlists, cutover switch | **done** |
 | 2 | guard matrix unit-tested (25 checks, no database) | **done** |
-| 3 | `npm run db:check-parity` — git / DEV / TEST | **done** (TEST leg pending) |
+| 3 | `npm run db:check-parity` — git / DEV / TEST | **done** (all three legs) |
 | 4 | `npm run dev:inspect` — read-only DEV diagnostics + snapshot/verify | **done** |
 | 5 | `.env.example` placeholders | **done** |
-| 6 | create `mr-clean-ops-test` | **blocked — needs a credential** |
-| 7 | apply 0001–0010 to TEST, verify parity three ways | after 6 |
-| 8 | seed synthetic identities, workspaces, baseline | after 7 |
-| 9 | cutover: flip the switch, remove DEV from both allowlists | after 8 |
-| 10 | point the E2E app server at TEST on its own port | after 9 |
-| 11 | acceptance: DEV snapshot → full suite on TEST → DEV verify | after 10 |
-| 12 | acceptance: TEST reset produces the intended baseline | after 10 |
+| 6 | create `mr-clean-ops-test` | **done** (created by the owner) |
+| 7 | apply 0001–0010 to TEST, verify parity three ways | **done** |
+| 8 | seed synthetic identities, workspaces, baseline | **done** (5 Auth users via Auth Admin) |
+| 9 | cutover: flip the switch, remove DEV from both allowlists | **done** |
+| 10 | point the E2E app server at TEST on its own port | **done** (`npm run dev:test`, 3101) |
+| 11 | acceptance: DEV snapshot → full suite on TEST → DEV verify | **done** |
+| 12 | acceptance: TEST reset produces the intended baseline | **done** (17 checks) |
 
-### Why step 6 is blocked
+### Why step 6 sat with the owner
 
 Creating a Supabase project requires either the dashboard or a Supabase personal
 access token, and it requires choosing a database password. Neither belongs in
 an agent's hands: entering or generating account credentials is exactly the
-category of action that stays with the person who owns the account.
+category of action that stays with the person who owns the account. The owner
+created `mr-clean-ops-test` (Singapore, same organization) and filled in the
+`TEST_*` variables; everything downstream of that was automated.
 
 There is no CLI in this repository and no access token in the environment, which
 is the correct state — it is why a stray script cannot create or destroy cloud
