@@ -15,7 +15,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import {
-  loadEnvLocal, resolveDevTarget, resolveTestTarget, projectRef, TEST_PROJECT_REQUIRED,
+  loadEnvLocal, resolveDevTarget, resolveDeclaredTestProject, projectRef, TEST_PROJECT_REQUIRED,
 } from '../supabase/tests/lib/target.mjs';
 import { readOnlyClient } from './lib/readonly-db.mjs';
 
@@ -70,17 +70,29 @@ console.log(`git       ${git.length} migration(s): ${fmt(git).join(', ')}`);
 const dev = await appliedMigrations(resolveDevTarget(), 'DEV');
 console.log(`DEV       ${dev.list.length} applied (${dev.ref}): ${fmt(dev.list).join(', ')}`);
 
-const testTarget = resolveTestTarget();
-const testConfigured = testTarget.mode === 'test' && Boolean(testTarget.url && testTarget.dbUser);
+// Parity asks whether the PROJECTS agree with git, so it addresses Test as a
+// project -- not through the cutover, which only decides where suites run.
+// Read through the cutover, this printed "PARITY OK" before the switch was
+// flipped having never once looked at Test: the same shape of lie as a suite
+// reporting a pass for checks it never executed.
+let testTarget = null, testConfigured = false, testWhy = '';
+try {
+  testTarget = resolveDeclaredTestProject();
+  testConfigured = true;
+} catch (e) {
+  testWhy = e.message.split('\n')[0];
+}
+
 let test = null;
 if (testConfigured) {
   test = await appliedMigrations(testTarget, 'TEST');
   console.log(`TEST      ${test.list.length} applied (${test.ref}): ${fmt(test.list).join(', ')}`);
 } else if (TEST_PROJECT_REQUIRED) {
-  console.error('\nFAIL: the TEST project is required but not configured in this environment.');
+  console.error(`\nFAIL: the TEST project is required but cannot be addressed.\n  ${testWhy}`);
   process.exit(1);
 } else {
-  console.log('TEST      not configured yet (pre-cutover) — that leg is not checked.');
+  console.log(`TEST      cannot be addressed -- that leg is NOT checked.`);
+  console.log(`          ${testWhy}`);
 }
 
 const problems = [];
@@ -97,7 +109,7 @@ console.log('');
 if (!problems.length) {
   console.log(testConfigured
     ? 'PARITY OK — git, DEV and TEST report the same migrations in the same order.'
-    : 'PARITY OK — git and DEV report the same migrations in the same order.');
+    : 'PARITY OK for git and DEV — TEST WAS NOT CHECKED, so this is not full parity.');
   process.exit(0);
 }
 

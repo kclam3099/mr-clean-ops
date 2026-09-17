@@ -268,6 +268,65 @@ export function resolveTestTarget(env = process.env) {
 }
 
 /**
+ * The TEST project itself, always read from TEST_*, whatever the cutover flag
+ * says.
+ *
+ * resolveTestTarget() answers "where should a suite run", and the cutover owns
+ * that. This answers a different question -- "which project IS Test" -- and the
+ * tooling that PROVISIONS Test needs it before the cutover can honestly be
+ * made. Migrating and seeding a project must happen while the suites are still
+ * pointed elsewhere; requiring the cutover first would mean flipping the switch
+ * on an empty schema and calling that reviewed.
+ *
+ * The guard here is not the allowlist. TEST_SAFE_PROJECT_REFS is the permission
+ * to WIPE, and provisioning is not wiping. What is checked instead is that the
+ * caller is not about to run DDL against Dev by accident: every source that
+ * names the project must agree, and the result must not be DEV.
+ */
+export function resolveDeclaredTestProject(env = process.env) {
+  const missing = REQUIRED_TEST_ENV.filter((n) => !env[n]);
+  if (missing.length) {
+    throw new Error(
+      `Cannot address the TEST project: missing ${missing.join(', ')} in .env.local.`);
+  }
+  const declared = env.EXPECTED_TEST_PROJECT_REF;
+  const url = (env.TEST_SUPABASE_URL || '').replace(/\/+$/, '');
+  const fromUrl = projectRef(url);
+  // A Session pooler host names the region, not the project; the ref travels in
+  // the username as postgres.<ref>. A direct host carries it as db.<ref>...
+  const user = env.TEST_SUPABASE_DB_USER || '';
+  const host = env.TEST_SUPABASE_DB_HOST || '';
+  const fromUser = /^postgres\.([a-z0-9]+)$/.exec(user)?.[1] ?? null;
+  const fromHost = /^db\.([a-z0-9]+)\.supabase\.co$/.exec(host)?.[1] ?? null;
+
+  const claims = Object.entries({
+    EXPECTED_TEST_PROJECT_REF: declared,
+    TEST_SUPABASE_URL: fromUrl,
+    TEST_SUPABASE_DB_USER: fromUser,
+    TEST_SUPABASE_DB_HOST: fromHost,
+  }).filter(([, v]) => v);
+
+  if (new Set(claims.map(([, v]) => v)).size !== 1) {
+    const lines = claims.map(([k, v]) => `  ${k.padEnd(26)} ${v}`).join('\n');
+    throw new Error(`The TEST variables disagree about which project this is:\n${lines}`);
+  }
+  if (declared === DEV_PROJECT_REF) {
+    throw new Error(
+      `Refusing: EXPECTED_TEST_PROJECT_REF is DEV (${DEV_PROJECT_REF}), the project ` +
+      `holding the owner's real bookings. Test must be a project of its own.`);
+  }
+  return {
+    ref: declared,
+    url,
+    publishableKey: env.TEST_SUPABASE_PUBLISHABLE_KEY,
+    dbUser: user,
+    dbHost: host,
+    dbPassword: env.TEST_SUPABASE_DB_PASSWORD,
+    identityPassword: env.TEST_IDENTITY_PASSWORD,
+  };
+}
+
+/**
  * The TEST secret key, for trusted setup tooling only — Auth Admin user
  * creation, and nothing else.
  *

@@ -21,31 +21,24 @@ import { dirname, resolve } from 'node:path';
 import pg from 'pg';
 import { dbSsl } from '../supabase/tests/lib/db-tls.mjs';
 import {
-  loadEnvLocal, resolveTestTarget, assertTestTarget, projectRef, DEV_PROJECT_REF, missingTestEnv,
+  loadEnvLocal, resolveDeclaredTestProject,
 } from '../supabase/tests/lib/target.mjs';
 
 loadEnvLocal();
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const missing = missingTestEnv();
-if (missing.length) {
-  console.error(`\nCannot migrate TEST: missing ${missing.join(', ')} in .env.local.`);
+// Which project IS Test -- not "where do suites run", which the cutover owns
+// and which is deliberately still pointed at Dev at this stage.
+let target;
+try {
+  target = resolveDeclaredTestProject();
+} catch (e) {
+  console.error(`
+${e.message}
+`);
   process.exit(2);
 }
-
-const ref = assertTestTarget();
-if (ref === DEV_PROJECT_REF) {
-  // Unreachable while DEV is off the allowlist; kept because "unreachable" is a
-  // claim about today's constants, and this file applies DDL.
-  console.error('\nRefusing: this resolved to DEV. Migrations are applied to DEV deliberately, not by a test script.');
-  process.exit(2);
-}
-
-const target = resolveTestTarget();
-if (projectRef(target.url) !== ref) {
-  console.error('\nRefusing: the URL and the proven ref disagree.');
-  process.exit(2);
-}
+const ref = target.ref;
 
 const files = readdirSync(resolve(REPO, 'supabase/migrations'))
   .filter((f) => f.endsWith('.sql'))
