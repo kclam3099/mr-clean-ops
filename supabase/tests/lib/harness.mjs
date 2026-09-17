@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import pg from 'pg';
+import { dbSsl } from './db-tls.mjs';
 import { loadEnvLocal, resolveTestTarget, assertTestTarget } from './target.mjs';
 import { EMAIL_BY_KEY } from './identities.mjs';
 
@@ -154,7 +155,7 @@ export async function adminClient() {
   const c = new pg.Client({
     host: CONFIG.dbHost(), port: 5432, user: CONFIG.dbUser(),
     password: CONFIG.dbPassword(), database: 'postgres',
-    ssl: { rejectUnauthorized: false },
+    ssl: dbSsl(),
   });
   await c.connect();
   return c;

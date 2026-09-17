@@ -23,6 +23,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
+import { dbSsl } from '../supabase/tests/lib/db-tls.mjs';
 import {
   loadEnvLocal, resolveTestTarget, assertWipeTarget, requireTestSecretKey,
   missingTestEnv, DEV_PROJECT_REF,
@@ -107,7 +108,7 @@ for (const id of IDENTITIES) {
 const db = new pg.Client({
   host: target.dbHost, port: 5432, user: target.dbUser,
   password: target.dbPassword, database: 'postgres',
-  ssl: { rejectUnauthorized: false },
+  ssl: dbSsl(),
 });
 await db.connect();
 const q = async (sql, p) => (await db.query(sql, p)).rows;

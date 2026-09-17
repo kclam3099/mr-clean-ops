@@ -11,6 +11,7 @@
 // believes it is read-only is the kind of thing that deletes a customer.
 
 import pg from 'pg';
+import { dbSsl } from '../../supabase/tests/lib/db-tls.mjs';
 import { loadEnvLocal } from '../../supabase/tests/lib/target.mjs';
 
 loadEnvLocal();
@@ -31,7 +32,7 @@ export async function readOnlyClient(target, label) {
   const c = new pg.Client({
     host: target.dbHost, port: 5432, user: target.dbUser,
     password: target.dbPassword, database: 'postgres',
-    ssl: { rejectUnauthorized: false },
+    ssl: dbSsl(),
   });
   await c.connect();
   await c.query('set session characteristics as transaction read only');

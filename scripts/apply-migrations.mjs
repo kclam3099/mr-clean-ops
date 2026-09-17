@@ -19,6 +19,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import pg from 'pg';
+import { dbSsl } from '../supabase/tests/lib/db-tls.mjs';
 import {
   loadEnvLocal, resolveTestTarget, assertTestTarget, projectRef, DEV_PROJECT_REF, missingTestEnv,
 } from '../supabase/tests/lib/target.mjs';
@@ -58,7 +59,7 @@ const files = readdirSync(resolve(REPO, 'supabase/migrations'))
 const db = new pg.Client({
   host: target.dbHost, port: 5432, user: target.dbUser,
   password: target.dbPassword, database: 'postgres',
-  ssl: { rejectUnauthorized: false },
+  ssl: dbSsl(),
 });
 await db.connect();
 
