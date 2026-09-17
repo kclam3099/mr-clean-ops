@@ -17,11 +17,11 @@
 // Run: npm run test:cleanup-safety
 
 import {
-  adminClient, assertDevProject, resolveIdentities, createFixture, createRecorder,
+  adminClient, assertTestTarget, resolveIdentities, createFixture, createRecorder,
   signIn, rpc, bookingArgs,
 } from './lib/harness.mjs';
 
-assertDevProject();
+assertTestTarget();
 const db = await adminClient();
 const ids = await resolveIdentities(db);
 const rec = createRecorder('CLEANUP SAFETY (data isolation)');

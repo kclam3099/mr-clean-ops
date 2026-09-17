@@ -1,6 +1,6 @@
-// DEV test-fixture maintenance. NOT a migration.
+// TEST test-fixture maintenance. NOT a migration.
 //
-// Removes accumulated synthetic scheduling data from the DEV project and
+// Removes accumulated synthetic scheduling data from the TEST project and
 // restores the baseline the regression suites expect. This is deliberately a
 // script and not a migration: it manipulates test fixtures, never schema, and
 // must never run against production.
@@ -17,29 +17,33 @@
 // predicate, and it is not part of any automated suite: the regression tests
 // coexist with manual data and clean up only rows they created.
 //
-// Because the owner now uses DEV for real operational testing, running this by
-// reflex destroys their work. It therefore refuses unless the caller states
-// the intent explicitly:
+// Since the cutover this targets TEST, whose contents are disposable by
+// definition. The explicit confirmation stays anyway: the guard that matters is
+// assertWipeTarget(), which refuses any project not on WIPEABLE_PROJECT_REFS,
+// and a broad DELETE should still be something someone typed on purpose rather
+// than something a stale shell alias can do.
 //
-//   CONFIRM_WIPE_DEV_APPOINTMENTS=yes npm run db:reset-dev-fixtures
+//   CONFIRM_WIPE_TEST_APPOINTMENTS=yes npm run db:reset-test-fixtures
 //
-// Run: npm run db:reset-dev-fixtures
+// Run: npm run db:reset-test-fixtures
 
-import { adminClient, assertDevProject, resolveIdentities } from './lib/harness.mjs';
+import { adminClient, resolveIdentities } from './lib/harness.mjs';
+import { assertWipeTarget } from './lib/target.mjs';
 
-assertDevProject();
+// Narrower than assertTestTarget: being allowed to clean up after yourself is
+// not the same permission as being allowed to empty a table.
+assertWipeTarget();
 
-if (process.env.CONFIRM_WIPE_DEV_APPOINTMENTS !== 'yes') {
+if (process.env.CONFIRM_WIPE_TEST_APPOINTMENTS !== 'yes') {
   console.error(`
-REFUSING TO WIPE DEV.
+REFUSING TO WIPE TEST.
 
-This deletes EVERY appointment in the DEV project, including manual bookings
-entered through the app. Automated suites do not need it — they own their
-fixtures by exact id and leave everything else alone.
+This deletes EVERY appointment in the TEST project. Automated suites do not
+need it — they own their fixtures by exact id and leave everything else alone.
 
 If you genuinely want an empty baseline, say so explicitly:
 
-  CONFIRM_WIPE_DEV_APPOINTMENTS=yes npm run db:reset-dev-fixtures
+  CONFIRM_WIPE_TEST_APPOINTMENTS=yes npm run db:reset-test-fixtures
 `);
   process.exit(2);
 }

@@ -10,7 +10,7 @@
 
 import { chromium } from "playwright";
 import {
-  adminClient, assertDevProject, resolveIdentities, createFixture,
+  adminClient, assertTestTarget, resolveIdentities, createFixture,
   createRecorder, CONFIG, signIn, rpc, bookingArgs,
 } from "../../supabase/tests/lib/harness.mjs";
 
@@ -18,7 +18,7 @@ const BASE = (process.env.E2E_BASE_URL || "http://localhost:3100").replace(/\/+$
 const PASSWORD = CONFIG.testPassword();
 const RANDOM_UUID = "3f2b7c58-0000-4000-8000-1234567890ab";
 
-assertDevProject();
+assertTestTarget();
 const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);

@@ -12,7 +12,7 @@
 
 import { chromium } from "playwright";
 import {
-  adminClient, assertDevProject, resolveIdentities, createFixture,
+  adminClient, assertTestTarget, resolveIdentities, createFixture,
   createRecorder, CONFIG, signIn, rpc, bookingArgs,
 } from "../../supabase/tests/lib/harness.mjs";
 
@@ -25,7 +25,7 @@ const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
 ];
 
-assertDevProject();
+assertTestTarget();
 const db = await adminClient();
 const ids = await resolveIdentities(db);
 const fx = createFixture(db);

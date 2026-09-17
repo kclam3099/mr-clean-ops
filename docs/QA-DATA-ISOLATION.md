@@ -140,17 +140,17 @@ needs rather than waiting for them.
 
 ### 10. The global reset is not part of any test run
 
-`npm run db:reset-dev-fixtures` deletes every appointment, including manual
+`npm run db:reset-test-fixtures` deletes every appointment in TEST, including manual
 bookings. It is the only place allowed to delete by a broad predicate, it is not
 in any suite, and it refuses unless the intent is stated:
 
 ```bash
-CONFIRM_WIPE_DEV_APPOINTMENTS=yes npm run db:reset-dev-fixtures
+CONFIRM_WIPE_TEST_APPOINTMENTS=yes npm run db:reset-test-fixtures
 ```
 
 ### 11. Fail-closed target guard
 
-`assertDevProject()` checks the **Supabase project ref** against an allowlist,
+`assertTestTarget()` checks the **Supabase project ref** against an allowlist,
 not a hostname substring — "dev" or "test" in a URL proves nothing, and a
 production project could contain either word. An unparseable URL, a missing ref
 and an unknown ref all refuse.
@@ -240,7 +240,7 @@ report identical migration lists would catch drift the moment it appears.
 
 ### F. Seed and auth
 
-Reuse `reset-dev-fixtures` as the TEST seeder — it already produces the exact
+Reuse `reset-test-fixtures` as the TEST seeder — it already produces the exact
 baseline the suites expect. Identities are created once per project with the same
 synthetic emails, so no suite code changes.
 

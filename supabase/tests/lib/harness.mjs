@@ -60,7 +60,6 @@ export const CONFIG = {
  * suite calls. It is renamed to `assertTestTarget` at the TEST cutover, when
  * "dev project" stops being the truthful description of what it permits.
  */
-export const assertDevProject = assertTestTarget;
 export { assertTestTarget };
 
 // ---------------------------------------------------------------------------
@@ -794,7 +793,7 @@ export async function book(fx, token, args) {
 // suite runner
 // ---------------------------------------------------------------------------
 export async function runSuite(suiteName, body) {
-  assertDevProject();
+  assertTestTarget();
   const db = await adminClient();
   const ids = await resolveIdentities(db);
   const fx = createFixture(db);

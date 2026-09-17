@@ -30,9 +30,9 @@
     "db:seed-test": "node scripts/seed-test-project.mjs",
     "db:check-parity": "node scripts/check-migration-parity.mjs",
     "dev:inspect": "node scripts/dev-inspect.mjs",
-    "db:reset-dev-fixtures": "node supabase/tests/reset-dev-fixtures.mjs",
     "db:bootstrap-prod": "node scripts/bootstrap-prod.mjs",
-    "dev:test": "node scripts/dev-test-server.mjs"
+    "dev:test": "node scripts/dev-test-server.mjs",
+    "db:reset-test-fixtures": "node supabase/tests/reset-test-fixtures.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
