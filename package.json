@@ -33,7 +33,8 @@
     "db:bootstrap-prod": "node scripts/bootstrap-prod.mjs",
     "dev:test": "node scripts/dev-test-server.mjs",
     "db:reset-test-fixtures": "node supabase/tests/reset-test-fixtures.mjs",
-    "db:create-prod": "node scripts/create-prod-project.mjs"
+    "db:create-prod": "node scripts/create-prod-project.mjs",
+    "deploy:prod": "node scripts/deploy-vercel-prod.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
