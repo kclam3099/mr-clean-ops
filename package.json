@@ -32,7 +32,8 @@
     "dev:inspect": "node scripts/dev-inspect.mjs",
     "db:bootstrap-prod": "node scripts/bootstrap-prod.mjs",
     "dev:test": "node scripts/dev-test-server.mjs",
-    "db:reset-test-fixtures": "node supabase/tests/reset-test-fixtures.mjs"
+    "db:reset-test-fixtures": "node supabase/tests/reset-test-fixtures.mjs",
+    "db:create-prod": "node scripts/create-prod-project.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
