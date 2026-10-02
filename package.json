@@ -35,7 +35,8 @@
     "db:reset-test-fixtures": "node supabase/tests/reset-test-fixtures.mjs",
     "db:create-prod": "node scripts/create-prod-project.mjs",
     "deploy:prod": "node scripts/deploy-vercel-prod.mjs",
-    "test:ack": "node supabase/tests/staff-acknowledgement-regression.mjs"
+    "test:ack": "node supabase/tests/staff-acknowledgement-regression.mjs",
+    "db:check-conn": "node scripts/check-db-connections.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",

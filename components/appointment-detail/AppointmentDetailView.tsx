@@ -14,7 +14,7 @@ import { OverrideDialog } from "@/components/appointment-form/OverrideDialog";
 import { ItemsEditor, initialItemRow, type ItemRow } from "@/components/appointment-form/ItemsEditor";
 import { estimatedDurationMinutes, formatDuration, formatMoney, subtotal } from "@/lib/pricing/duration";
 import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
-import { staffColour, staffInitials } from "@/lib/agenda/staff-colour";
+import { colourAt, staffInitials } from "@/lib/agenda/staff-colour";
 import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
 } from "@/components/ui/icons";
@@ -191,11 +191,11 @@ function Header({ detail, showWorkspace, backHref }: {
           {detail.staffName ? (
             <span
               className={`flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs font-semibold
-                          ${staffColour(detail.staffId ?? null).bg} ${staffColour(detail.staffId ?? null).text}`}
+                          ${colourAt(detail.staffColourIndex).bg} ${colourAt(detail.staffColourIndex).text}`}
             >
               <span
                 className={`flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold
-                            text-white ${staffColour(detail.staffId ?? null).solid}`}
+                            text-white ${colourAt(detail.staffColourIndex).solid}`}
               >
                 {staffInitials(detail.staffName)}
               </span>

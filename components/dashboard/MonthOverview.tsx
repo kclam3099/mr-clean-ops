@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { compactMoney } from "@/lib/pricing/duration";
-import { staffColour, staffBadgeLetter } from "@/lib/agenda/staff-colour";
+import { colourAt, staffBadgeLetter } from "@/lib/agenda/staff-colour";
 
 /**
  * The dashboard's month operations overview.
@@ -35,6 +35,7 @@ export type MonthEntry = {
   customerName: string;
   staffId: string | null;
   staffName: string | null;
+  staffColourIndex: number;
   totalAmount: number | null;
   isLargeJob: boolean;
 };
@@ -372,11 +373,11 @@ function MonthEntryRow({
               aria-hidden
               className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full
                           text-[8px] font-bold leading-none text-white
-                          ${staffColour(entry.staffId).solid}`}
+                          ${colourAt(entry.staffColourIndex).solid}`}
             >
               {staffBadgeLetter(entry.staffName)}
             </span>
-            <span className={`truncate font-medium ${staffColour(entry.staffId).text}`}>
+            <span className={`truncate font-medium ${colourAt(entry.staffColourIndex).text}`}>
               {entry.staffName}
             </span>
           </>

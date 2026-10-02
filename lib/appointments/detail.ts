@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/serverClient";
+import { staffColourIndexes } from "@/lib/agenda/staff-colour";
 import type { SessionContext } from "@/lib/auth/session";
 
 /**
@@ -39,6 +40,8 @@ export type AppointmentDetail = {
   totalAmount: number;
   isLargeJob: boolean;
   staffId: string | null;
+  /** Rank into the staff palette, matching every other surface. */
+  staffColourIndex: number;
   staffName: string | null;
   workspaceId: string;
   workspaceName: string | null;
@@ -109,6 +112,11 @@ export async function getAppointmentDetail(
   const row = data as unknown as Row;
   const startMinutes = toMinutes(row.start_time);
 
+  // The same ranking the agenda uses, so one person is one colour whether they
+  // are seen in a month cell or on their own appointment.
+  const { data: staffRows } = await supabase.from("staff").select("id");
+  const colours = staffColourIndexes((staffRows ?? []).map((r) => r.id as string));
+
   return {
     id: row.id,
     status: row.status,
@@ -126,6 +134,7 @@ export async function getAppointmentDetail(
     isLargeJob: row.is_large_job,
     staffId: row.staff_id,
     staffName: one(row.staff)?.display_name ?? null,
+    staffColourIndex: row.staff_id ? (colours.get(row.staff_id) ?? -1) : -1,
     workspaceId: row.workspace_id,
     workspaceName: one(row.workspace)?.name ?? null,
     items: (row.appointment_items ?? []).map((i) => ({

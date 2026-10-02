@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/serverClient";
 import type { SessionContext } from "@/lib/auth/session";
 import type { WorkspaceScope } from "@/lib/workspace/scope";
 import { logAndMap, type AppError } from "@/lib/errors/appError";
+import { cache } from "react";
+import { staffColourIndexes } from "@/lib/agenda/staff-colour";
 
 /**
  * The shared read layer behind every calendar and agenda surface.
@@ -43,6 +45,12 @@ export type AgendaAppointment = {
   remarks: string | null;
   staffId: string | null;
   staffName: string | null;
+  /**
+   * Rank into the staff palette, or -1 for unassigned. Computed once per
+   * request over every staff id this caller can see, so one person is one
+   * colour on every surface and no two collide.
+   */
+  staffColourIndex: number;
   workspaceId: string;
   workspaceName: string | null;
 };
@@ -82,7 +90,7 @@ type Row = {
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
-function toAppointment(row: Row): AgendaAppointment {
+function toAppointment(row: Row, colours: Map<string, number>): AgendaAppointment {
   const startMinutes = toMinutes(row.start_time);
   return {
     id: row.id,
@@ -103,10 +111,24 @@ function toAppointment(row: Row): AgendaAppointment {
     remarks: row.remarks,
     staffId: row.staff_id,
     staffName: one(row.staff)?.display_name ?? null,
+    staffColourIndex: row.staff_id ? (colours.get(row.staff_id) ?? -1) : -1,
     workspaceId: row.workspace_id,
     workspaceName: one(row.workspace)?.name ?? null,
   };
 }
+
+/**
+ * Colour ranks for every staff member this caller can see.
+ *
+ * Cached for the request, so a page rendering a month grid and a status panel
+ * ranks once. RLS-filtered like everything else: a Partner Master ranks the
+ * staff they can see, which is the set they will ever have on screen.
+ */
+const staffColourRanks = cache(async (): Promise<Map<string, number>> => {
+  const supabase = await createClient();
+  const { data } = await supabase.from("staff").select("id");
+  return staffColourIndexes((data ?? []).map((r) => r.id as string));
+});
 
 /** Master calendar/agenda for a workspace scope. */
 export async function getMasterAgenda(
@@ -136,7 +158,8 @@ export async function getMasterAgenda(
 
   const { data, error } = await query;
   if (error) return { ok: false, error: logAndMap("getMasterAgenda", error) };
-  return { ok: true, appointments: (data as unknown as Row[]).map(toAppointment) };
+  const colours = await staffColourRanks();
+  return { ok: true, appointments: (data as unknown as Row[]).map((r) => toAppointment(r, colours)) };
 }
 
 /**
@@ -163,7 +186,8 @@ export async function getStaffAgenda(
     .order("start_time");
 
   if (error) return { ok: false, error: logAndMap("getStaffAgenda", error) };
-  return { ok: true, appointments: (data as unknown as Row[]).map(toAppointment) };
+  const colours = await staffColourRanks();
+  return { ok: true, appointments: (data as unknown as Row[]).map((r) => toAppointment(r, colours)) };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { AgendaAppointment } from "@/lib/agenda/queries";
 import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
-import { staffColour, staffInitials } from "@/lib/agenda/staff-colour";
+import { colourAt, staffInitials } from "@/lib/agenda/staff-colour";
 import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
   CheckIcon, BanIcon,
@@ -49,7 +49,7 @@ export function AppointmentCard({
     a.customerPhone,
     buildReminderMessage({ customerName: a.customerName, date: a.date, startTime: a.startTime }),
   );
-  const colour = staffColour(a.staffId ?? null);
+  const colour = colourAt(a.staffColourIndex);
   const cancelled = a.status === "cancelled";
 
   return (

@@ -123,6 +123,7 @@ export default async function DashboardPage({
     customerName: a.customerName,
     staffId: a.staffId,
     staffName: a.staffName,
+    staffColourIndex: a.staffColourIndex,
     totalAmount: a.totalAmount,
     isLargeJob: a.isLargeJob,
   }));
