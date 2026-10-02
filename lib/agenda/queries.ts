@@ -130,6 +130,11 @@ const staffColourRanks = cache(async (): Promise<Map<string, number>> => {
   return staffColourIndexes((data ?? []).map((r) => r.id as string));
 });
 
+/** The same per-request colour ranks, for surfaces that draw staff with no rows. */
+export async function getStaffColourRanks(): Promise<Map<string, number>> {
+  return staffColourRanks();
+}
+
 /** Master calendar/agenda for a workspace scope. */
 export async function getMasterAgenda(
   session: SessionContext,

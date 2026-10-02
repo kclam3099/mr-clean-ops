@@ -5,8 +5,9 @@ import { resolveScope, scopeOptions, ALL_OPERATIONS } from "@/lib/workspace/scop
 import {
   getMasterAgenda, businessToday, monthGridRange, monthGridDays,
   monthKey, monthLabel, addMonths, sameMonth,
-  weekDays, dashWeekRange, weekLabel, weekStart, addDays,
+  weekDays, dashWeekRange, weekLabel, weekStart, addDays, getStaffColourRanks,
 } from "@/lib/agenda/queries";
+import { getCalendarStaff } from "@/lib/agenda/staff";
 import { MonthOverview, type MonthEntry } from "@/components/dashboard/MonthOverview";
 import { StaffDayStatusPanel } from "@/components/dashboard/StaffDayStatusPanel";
 import { getStaffDayStatus } from "@/lib/agenda/staff-status";
@@ -74,10 +75,16 @@ export default async function DashboardPage({
 
   // Both reads are RLS-filtered and independent, so they go together rather
   // than making the morning panel wait for the month grid.
-  const [result, dayStatus] = await Promise.all([
+  // The roster is the calendar's own (the same RLS-visible set as Quick Add),
+  // so the day agenda can list a person with nothing booked without ever
+  // listing someone this Master cannot see.
+  const [result, dayStatus, roster, colourRanks] = await Promise.all([
     getMasterAgenda(session, scope, queryRange),
     getStaffDayStatus(session, scope, today),
+    getCalendarStaff(session, scope),
+    getStaffColourRanks(),
   ]);
+  const staff = roster.map((s) => ({ ...s, colourIndex: colourRanks.get(s.id) ?? -1 }));
 
   const scopeValue = scope.kind === "workspace" ? scope.workspaceId : ALL_OPERATIONS;
   const rangeHref = (r: "week" | "next-week" | "month", weekIso?: string) => {
@@ -260,6 +267,7 @@ export default async function DashboardPage({
         days={days}
         today={today}
         entries={entries}
+        staff={staff}
         detailHrefBase="/appointments"
       />
     </div>

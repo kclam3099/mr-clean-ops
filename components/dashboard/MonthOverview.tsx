@@ -40,6 +40,9 @@ export type MonthEntry = {
   isLargeJob: boolean;
 };
 
+/** A person on the roster, so a day can say "no appointment" for them. */
+export type MonthStaff = { id: string; name: string; colourIndex: number };
+
 /** How many entries a desktop cell shows before collapsing into "+N more". */
 const VISIBLE_PER_CELL = 3;
 
@@ -68,6 +71,7 @@ export function MonthOverview({
   days,
   today,
   entries,
+  staff = [],
   detailHrefBase,
 }: {
   /** Active month as "YYYY-MM". Days outside it are shown, de-emphasised. */
@@ -76,6 +80,8 @@ export function MonthOverview({
   days: string[];
   today: string;
   entries: MonthEntry[];
+  /** Everyone the selected-day agenda lists, booked or not. */
+  staff?: MonthStaff[];
   /** Detail links are built here because a function cannot cross to a client. */
   detailHrefBase: string;
 }) {
@@ -131,6 +137,7 @@ export function MonthOverview({
 
   const selectedEntries = byDate.get(selectedDay) ?? [];
   const selectedTotal = dayTotal(selectedDay);
+  const selectedGroups = staffGroups(staff, selectedEntries);
 
   return (
     <div ref={gridRef} data-month-grid={month}>
@@ -338,7 +345,7 @@ export function MonthOverview({
               + New appointment
             </button>
           </div>
-          {selectedEntries.length === 0 ? (
+          {selectedGroups.length === 0 ? (
             // Says nothing about availability: hidden work and physical
             // conflicts are invisible here by design, so "free" would be a lie.
             <p className="rounded-lg border border-dashed border-line px-3 py-6 text-center
@@ -346,9 +353,40 @@ export function MonthOverview({
               Nothing scheduled.
             </p>
           ) : (
-            <div className="space-y-1">
-              {selectedEntries.map((e) => (
-                <MonthEntryRow key={e.id} entry={e} href={`${detailHrefBase}/${e.id}`} roomy />
+            // One block per person, everyone on the roster included, so "who
+            // has nothing this day" is read off the list, not worked out.
+            <div className="space-y-2">
+              {selectedGroups.map((g) => (
+                <div key={g.key} data-day-staff={g.key}
+                  className="overflow-hidden rounded-lg border border-line bg-white">
+                  <div className="flex items-center gap-1.5 border-b border-line/70 bg-sunken/60 px-2 py-1.5">
+                    {g.name ? (
+                      <span aria-hidden
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full
+                                    text-[10px] font-bold text-white ${colourAt(g.colourIndex).solid}`}>
+                        {staffBadgeLetter(g.name)}
+                      </span>
+                    ) : null}
+                    <span className={`truncate text-xs font-semibold
+                                      ${g.name ? colourAt(g.colourIndex).text : "text-ink-muted"}`}>
+                      {g.name ?? "Unassigned"}
+                    </span>
+                    {g.entries.length > 0 ? (
+                      <span className="ml-auto shrink-0 text-[11px] font-semibold tabular-nums text-ink-muted">
+                        {g.entries.length} · {compactMoney(g.entries.reduce((t, e) => t + (e.totalAmount ?? 0), 0))}
+                      </span>
+                    ) : null}
+                  </div>
+                  {g.entries.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-ink-faint">No appointment</p>
+                  ) : (
+                    <div className="space-y-1 p-1">
+                      {g.entries.map((e) => (
+                        <MonthEntryRow key={e.id} entry={e} href={`${detailHrefBase}/${e.id}`} roomy hideStaff />
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -365,12 +403,36 @@ export function MonthOverview({
  * all live on the appointment itself. Repeating them here is what turned the
  * old dashboard into 200px of chrome per booking.
  */
+/**
+ * The selected day, one group per person: every roster member in roster order
+ * (empty ones included), then anyone booked who is not on the roster — e.g. a
+ * person since removed — and unassigned work last.
+ */
+function staffGroups(staff: MonthStaff[], dayEntries: MonthEntry[]) {
+  type Group = { key: string; name: string | null; colourIndex: number; entries: MonthEntry[] };
+  const groups = new Map<string, Group>();
+  for (const s of staff) groups.set(s.id, { key: s.id, name: s.name, colourIndex: s.colourIndex, entries: [] });
+  for (const e of dayEntries) {
+    const key = e.staffId ?? "unassigned";
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, name: e.staffId ? e.staffName : null, colourIndex: e.staffColourIndex, entries: [] };
+      groups.set(key, g);
+    }
+    g.entries.push(e);
+  }
+  const all = [...groups.values()];
+  return [...all.filter((g) => g.key !== "unassigned"), ...all.filter((g) => g.key === "unassigned")];
+}
+
 function MonthEntryRow({
-  entry, href, roomy = false,
+  entry, href, roomy = false, hideStaff = false,
 }: {
   entry: MonthEntry;
   href: string;
   roomy?: boolean;
+  /** Inside a per-person group the name is already the heading. */
+  hideStaff?: boolean;
 }) {
   return (
     <Link
@@ -403,7 +465,7 @@ function MonthEntryRow({
             it is an accelerator, not the message: colour is not readable to
             everyone and does not survive a screenshot pasted into WhatsApp,
             so the name stays. */}
-        {entry.staffName ? (
+        {entry.staffName && !hideStaff ? (
           <>
             <span
               aria-hidden
@@ -420,7 +482,7 @@ function MonthEntryRow({
         ) : null}
         {entry.totalAmount !== null ? (
           <>
-            {entry.staffName ? <span aria-hidden="true">·</span> : null}
+            {entry.staffName && !hideStaff ? <span aria-hidden="true">·</span> : null}
             <span className="shrink-0 tabular-nums">{compactMoney(entry.totalAmount)}</span>
           </>
         ) : null}
