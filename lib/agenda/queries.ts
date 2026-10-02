@@ -284,3 +284,50 @@ export function groupByDate(items: AgendaAppointment[]): Array<{ date: string; i
   }
   return [...map.entries()].map(([date, list]) => ({ date, items: list }));
 }
+
+// ---------------------------------------------------------------------------
+// Week ranges, for the dashboard's shorter views
+// ---------------------------------------------------------------------------
+
+/**
+ * The Sunday that starts the week containing this date.
+ *
+ * Sunday rather than Monday to match the month grid above. A dashboard whose
+ * week starts on a different day from its month would put the same date in a
+ * different column depending on which button was last pressed.
+ */
+export function weekStart(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y as number, (m as number) - 1, d as number));
+  return addDays(isoDate, -dt.getUTCDay());
+}
+
+/** The seven dates of the week containing this one, Sunday first. */
+export function weekDays(isoDate: string): string[] {
+  const from = weekStart(isoDate);
+  return Array.from({ length: 7 }, (_, i) => addDays(from, i));
+}
+
+/**
+ * Sunday to Saturday, inclusive — the query range for the dashboard's week
+ * view. Named apart from weekRange, which the scheduling calendar owns and
+ * anchors on MONDAY; two functions called the same thing that disagree about
+ * which day a week starts is a bug waiting for a Sunday.
+ */
+export function dashWeekRange(isoDate: string): DateRange {
+  const from = weekStart(isoDate);
+  return { from, to: addDays(from, 6) };
+}
+
+/** "28 Sep – 4 Oct 2026", for a week heading. */
+export function weekLabel(isoDate: string): string {
+  const from = weekStart(isoDate);
+  const to = addDays(from, 6);
+  const fmt = (iso: string, withYear: boolean) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const month = new Date(Date.UTC(y as number, (m as number) - 1, 1))
+      .toLocaleString("en-GB", { month: "short", timeZone: "UTC" });
+    return `${d} ${month}${withYear ? ` ${y}` : ""}`;
+  };
+  return `${fmt(from, false)} – ${fmt(to, true)}`;
+}

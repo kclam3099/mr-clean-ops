@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { compactMoney } from "@/lib/pricing/duration";
+import { staffColour, staffBadgeLetter } from "@/lib/agenda/staff-colour";
 
 /**
  * The dashboard's month operations overview.
@@ -32,6 +33,7 @@ export type MonthEntry = {
   date: string;
   startTime: string;
   customerName: string;
+  staffId: string | null;
   staffName: string | null;
   totalAmount: number | null;
   isLargeJob: boolean;
@@ -62,13 +64,18 @@ export function MonthOverview({
 }: {
   /** Active month as "YYYY-MM". Days outside it are shown, de-emphasised. */
   month: string;
-  /** The 42 dates of the grid, in order, Sunday first. */
+  /** The dates of the grid, in order, Sunday first: 42 for a month, 7 for a week. */
   days: string[];
   today: string;
   entries: MonthEntry[];
   /** Detail links are built here because a function cannot cross to a client. */
   detailHrefBase: string;
 }) {
+  // Seven dates is a week, forty-two is a month. Derived rather than passed,
+  // so the two cannot disagree about which one is being drawn.
+  const isWeek = days.length <= 7;
+  const visiblePerCell = isWeek ? 8 : VISIBLE_PER_CELL;
+
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>(() =>
     days.includes(today) ? today : (days.find((d) => d.slice(0, 7) === month) ?? (days[0] as string)),
@@ -131,15 +138,16 @@ export function MonthOverview({
             const list = byDate.get(date) ?? [];
             const outside = date.slice(0, 7) !== month;
             const isToday = date === today;
-            const hidden = list.length - VISIBLE_PER_CELL;
+            const hidden = list.length - visiblePerCell;
             return (
               <div
                 key={date}
                 data-day-cell={date}
                 data-outside-month={outside ? "true" : undefined}
-                className={`group relative min-h-[7.5rem] border-b border-r border-line/70 p-1.5
+                className={`group relative border-b border-r border-line/70 p-1.5
+                            ${isWeek ? "min-h-[18rem]" : "min-h-[7.5rem]"}
                             ${i % 7 === 6 ? "border-r-0" : ""}
-                            ${i >= 35 ? "border-b-0" : ""}
+                            ${isWeek || i >= 35 ? "border-b-0" : ""}
                             ${outside ? "bg-sunken/60" : ""}
                             ${isToday ? "bg-amber/15 ring-2 ring-inset ring-gold" : ""}`}
               >
@@ -169,7 +177,7 @@ export function MonthOverview({
                 </div>
 
                 <div className="space-y-0.5">
-                  {list.slice(0, VISIBLE_PER_CELL).map((e) => (
+                  {list.slice(0, visiblePerCell).map((e) => (
                     <MonthEntryRow key={e.id} entry={e} href={`${detailHrefBase}/${e.id}`} />
                   ))}
                 </div>
@@ -345,17 +353,34 @@ function MonthEntryRow({
         {entry.isLargeJob ? (
           <span
             data-large-job={entry.id}
-            className="ml-auto shrink-0 self-center rounded bg-amber-100 px-1 text-[9px] font-bold
-                       tracking-wide text-amber-800"
+            className="ml-auto shrink-0 self-center rounded bg-gold px-1 text-[9px] font-bold
+                       tracking-wide text-brand-900"
           >
             LARGE
           </span>
         ) : null}
       </span>
       <span className="flex items-center gap-[3px] truncate text-ink-muted">
-        {/* Staff is TEXT, never colour alone — colour is not readable to
-            everyone and does not survive a screenshot pasted into WhatsApp. */}
-        {entry.staffName ? <span className="truncate">{entry.staffName}</span> : null}
+        {/* A coloured initial AND the name. The disc is what makes a month of
+            cells scannable — you learn the colour once and stop reading — but
+            it is an accelerator, not the message: colour is not readable to
+            everyone and does not survive a screenshot pasted into WhatsApp,
+            so the name stays. */}
+        {entry.staffName ? (
+          <>
+            <span
+              aria-hidden
+              className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full
+                          text-[8px] font-bold leading-none text-white
+                          ${staffColour(entry.staffId).solid}`}
+            >
+              {staffBadgeLetter(entry.staffName)}
+            </span>
+            <span className={`truncate font-medium ${staffColour(entry.staffId).text}`}>
+              {entry.staffName}
+            </span>
+          </>
+        ) : null}
         {entry.totalAmount !== null ? (
           <>
             {entry.staffName ? <span aria-hidden="true">·</span> : null}

@@ -5,6 +5,7 @@ import { resolveScope, scopeOptions, ALL_OPERATIONS } from "@/lib/workspace/scop
 import {
   getMasterAgenda, businessToday, monthGridRange, monthGridDays,
   monthKey, monthLabel, addMonths, sameMonth,
+  weekDays, dashWeekRange, weekLabel, weekStart, addDays,
 } from "@/lib/agenda/queries";
 import { MonthOverview, type MonthEntry } from "@/components/dashboard/MonthOverview";
 import { StaffDayStatusPanel } from "@/components/dashboard/StaffDayStatusPanel";
@@ -33,7 +34,7 @@ export const metadata = { title: "Dashboard — Mr Clean & Clean Ops" };
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ws?: string; month?: string }>;
+  searchParams: Promise<{ ws?: string; month?: string; range?: string; week?: string }>;
 }) {
   const session = await getSessionContext();
   if (!session) redirect("/login");
@@ -43,24 +44,48 @@ export default async function DashboardPage({
   const hasChoice = scopeOptions(session).length >= 2;
 
   const today = businessToday();
+
+  // Three ranges, because "how full are we" is a different question on a Monday
+  // morning than at month end. An unrecognised value falls back to the month
+  // rather than erroring, like every other hand-editable parameter here.
+  const range: "week" | "next-week" | "month" =
+    params.range === "week" || params.range === "next-week" ? params.range : "month";
+
   // A hand-edited or stale month falls back to this one rather than erroring.
   const anchor = /^\d{4}-\d{2}$/.test(params.month ?? "") ? `${params.month}-01` : today;
   const month = monthKey(anchor);
 
+  // The week views anchor on an explicit date when one is given, so paging
+  // forward from "next week" keeps working past the end of the month.
+  const weekAnchor = /^\d{4}-\d{2}-\d{2}$/.test(params.week ?? "")
+    ? (params.week as string)
+    : range === "next-week" ? addDays(weekStart(today), 7) : today;
+
   // Exactly the cells the grid draws — six Sunday-anchored weeks — and nothing
   // beyond them. Paging a month forward is a new query for that grid, not a
   // speculative fetch of the rest of the year.
-  const range = monthGridRange(anchor);
-  const days = monthGridDays(anchor);
+  const isWeek = range !== "month";
+  const queryRange = isWeek ? dashWeekRange(weekAnchor) : monthGridRange(anchor);
+  const days = isWeek ? weekDays(weekAnchor) : monthGridDays(anchor);
 
   // Both reads are RLS-filtered and independent, so they go together rather
   // than making the morning panel wait for the month grid.
   const [result, dayStatus] = await Promise.all([
-    getMasterAgenda(session, scope, range),
+    getMasterAgenda(session, scope, queryRange),
     getStaffDayStatus(session, scope, today),
   ]);
 
   const scopeValue = scope.kind === "workspace" ? scope.workspaceId : ALL_OPERATIONS;
+  const rangeHref = (r: "week" | "next-week" | "month", weekIso?: string) => {
+    const q = new URLSearchParams();
+    if (hasChoice) q.set("ws", scopeValue);
+    if (r !== "month") {
+      q.set("range", r);
+      if (weekIso) q.set("week", weekIso);
+    }
+    return `/dashboard?${q.toString()}`;
+  };
+
   const monthHref = (m: string) => {
     const q = new URLSearchParams();
     if (hasChoice) q.set("ws", scopeValue);
@@ -74,7 +99,7 @@ export default async function DashboardPage({
       {/* The subheading names the RESOLVED scope, and the selector in the nav
           reads the same URL parameter, so the two cannot disagree. */}
       <p className="text-sm text-ink-muted" data-scope-label>
-        {scope.label} · Month overview
+        {scope.label} · {isWeek ? "Week" : "Month"} overview
       </p>
     </div>
   );
@@ -96,6 +121,7 @@ export default async function DashboardPage({
     date: a.date,
     startTime: a.startTime,
     customerName: a.customerName,
+    staffId: a.staffId,
     staffName: a.staffName,
     totalAmount: a.totalAmount,
     isLargeJob: a.isLargeJob,
@@ -105,7 +131,10 @@ export default async function DashboardPage({
   // days visible from the neighbouring months do not inflate them. Computed
   // from rows this caller already received, never from a separate aggregate —
   // Nick and KC legitimately see different figures.
-  const inMonth = entries.filter((e) => sameMonth(e.date, anchor));
+  // For a week every visible day belongs to it, so there is nothing to exclude.
+  // For a month the leading and trailing days of the neighbouring months are
+  // drawn but must not inflate the totals.
+  const inMonth = isWeek ? entries : entries.filter((e) => sameMonth(e.date, anchor));
   const revenue = inMonth.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0);
   const largeJobs = inMonth.filter((e) => e.isLargeJob).length;
 
@@ -126,10 +155,46 @@ export default async function DashboardPage({
         </Link>
       </div>
 
+      {/* Range first, navigation second. Which span you are looking at is the
+          bigger decision, and putting it on the same row as the arrows made
+          "next" ambiguous — next week or next month? */}
+      <div
+        role="tablist"
+        aria-label="Date range"
+        data-range-tabs
+        className="inline-flex rounded-xl border border-line bg-card p-0.5"
+      >
+        {([
+          ["week", "This week", rangeHref("week")],
+          ["next-week", "Next week", rangeHref("next-week")],
+          ["month", "This month", rangeHref("month")],
+        ] as const).map(([key, label, href]) => {
+          const active = key === "month" ? !isWeek : range === key;
+          return (
+            <Link
+              key={key}
+              href={href}
+              role="tab"
+              aria-selected={active}
+              data-range={key}
+              data-active={active ? "true" : undefined}
+              className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold
+                          transition-colors duration-200 ${
+                            active
+                              ? "bg-brand text-white"
+                              : "text-ink-muted hover:bg-sunken hover:text-ink"
+                          }`}
+            >
+              {label}
+            </Link>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5">
           <Link
-            href={monthHref(monthKey(today))}
+            href={isWeek ? rangeHref(range, weekStart(today)) : monthHref(monthKey(today))}
             data-month-today
             className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-medium
                        text-ink transition hover:bg-sunken"
@@ -137,25 +202,29 @@ export default async function DashboardPage({
             Today
           </Link>
           <Link
-            href={monthHref(monthKey(addMonths(anchor, -1)))}
+            href={isWeek
+              ? rangeHref(range, addDays(weekStart(weekAnchor), -7))
+              : monthHref(monthKey(addMonths(anchor, -1)))}
             data-month-prev
-            aria-label="Previous month"
+            aria-label={isWeek ? "Previous week" : "Previous month"}
             className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
                        text-ink transition hover:bg-sunken"
           >
             <span aria-hidden="true">←</span>
           </Link>
           <Link
-            href={monthHref(monthKey(addMonths(anchor, 1)))}
+            href={isWeek
+              ? rangeHref(range, addDays(weekStart(weekAnchor), 7))
+              : monthHref(monthKey(addMonths(anchor, 1)))}
             data-month-next
-            aria-label="Next month"
+            aria-label={isWeek ? "Next week" : "Next month"}
             className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
                        text-ink transition hover:bg-sunken"
           >
             <span aria-hidden="true">→</span>
           </Link>
           <h2 className="ml-1.5 text-base font-semibold tracking-tight text-ink" data-month-label>
-            {monthLabel(anchor)}
+            {isWeek ? weekLabel(weekAnchor) : monthLabel(anchor)}
           </h2>
         </div>
 
@@ -181,7 +250,7 @@ export default async function DashboardPage({
       <MonthOverview
         /* Remount on a month change: the selected day and any open popover
            belong to the month that was on screen, not the one arriving. */
-        key={month}
+        key={isWeek ? `week-${weekStart(weekAnchor)}` : month}
         month={month}
         days={days}
         today={today}

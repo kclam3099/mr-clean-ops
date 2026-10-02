@@ -64,6 +64,24 @@ export function staffColour(staffId: string | null | undefined): StaffColour {
   return PALETTE[h % PALETTE.length] as StaffColour;
 }
 
+/**
+ * The single letter for a round badge.
+ *
+ * An underscore marks a PREFIX rather than a given name — TEST_JACK is Jack
+ * with a label on the front — so the identifying letter is in the last
+ * segment. A space marks a personal name, where the first word identifies.
+ * Taking the first letter either way turned three different people into three
+ * badges that all read "T".
+ */
+export function staffBadgeLetter(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  const segment = trimmed.includes("_")
+    ? (trimmed.split("_").filter(Boolean).pop() as string)
+    : trimmed;
+  return (segment[0] ?? "?").toUpperCase();
+}
+
 /** Initials for a compact chip. Two letters at most; one for a single word. */
 export function staffInitials(name: string): string {
   const parts = name.trim().split(/[\s_]+/).filter(Boolean);
