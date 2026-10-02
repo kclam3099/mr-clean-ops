@@ -68,6 +68,7 @@ const run = (args, stdin = null, { quiet = false } = {}) =>
     const child = spawn(process.platform === 'win32' ? 'vercel.cmd' : 'vercel', args, {
       stdio: [stdin === null ? 'inherit' : 'pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32',
+      env: { ...process.env, NODE_NO_WARNINGS: '1' },
     });
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
@@ -91,7 +92,15 @@ for (const [name, value] of [[URL_NAME, url], [KEY_NAME, key]]) {
   // Remove first: `env add` refuses when the variable already exists, and a
   // stale value is exactly the failure this script exists to end.
   await run(['env', 'rm', name, 'production', '--yes'], null, { quiet: true });
-  const code = await run(['env', 'add', name, 'production'], value, { quiet: true });
+  // --visibility config --no-sensitive is required, not cosmetic. The CLI
+  // defaults to storing a variable encrypted, and Vercel refuses that for a
+  // NEXT_PUBLIC_* name on Production: anything with that prefix is compiled
+  // into the browser bundle, so calling it a secret would be a lie the
+  // platform declines to tell. Without these flags every add fails with
+  // invalid_visibility and nothing deploys.
+  const code = await run(
+    ['env', 'add', name, 'production', '--visibility', 'config', '--no-sensitive'],
+    value, { quiet: true });
   console.log(`  ${code === 0 ? 'set  ' : 'FAILED'} ${name}`);
   if (code !== 0) {
     console.error(`\nCould not set ${name}. Nothing was deployed.\n`);
