@@ -27,6 +27,12 @@ export type SessionWorkspace = {
 export type SessionContext = {
   userId: string;
   email: string | null;
+  /**
+   * True while this account is still using the opening password a manager
+   * handed over. Every shell redirects to /change-password until it is false,
+   * so the handover credential cannot become the standing one.
+   */
+  mustChangePassword: boolean;
   profileId: string;
   fullName: string;
   role: UserRole;
@@ -70,7 +76,7 @@ async function resolveSession(): Promise<
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, role, is_active")
+    .select("id, full_name, role, is_active, must_change_password")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -90,6 +96,7 @@ async function resolveSession(): Promise<
   return {
     ok: true,
     session: {
+      mustChangePassword: profile.must_change_password === true,
       userId: user.id,
       email: user.email ?? null,
       profileId: profile.id,

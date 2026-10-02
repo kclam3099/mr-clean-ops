@@ -4,34 +4,46 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/serverClient";
 import { getSessionOrProblem, homePathFor } from "@/lib/auth/session";
+import { emailForUsername } from "@/lib/auth/username";
 
 /**
  * Sign-in / sign-out Server Actions.
  *
  * Sign-in deliberately returns ONE message for every failure mode — wrong
- * password, unknown address, or an account with no/inactive profile. Telling
+ * password, unknown username, or an account with no/inactive profile. Telling
  * them apart would turn the form into an account-existence oracle for a system
  * whose whole design keeps people from discovering each other.
+ *
+ * A username that cannot be one at all is answered with the same message and
+ * the same work, rather than returning early: a faster "no" for malformed input
+ * is still a signal about what the valid shape is.
  */
 
 export type LoginState = { error: string | null };
 
-const GENERIC_FAILURE = "Incorrect email or password.";
+const GENERIC_FAILURE = "Incorrect username or password.";
 const INACTIVE = "This account is not active. Please contact your manager.";
 
 export async function signInAction(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!email || !password) return { error: "Enter your email and password." };
+  if (!username || !password) {
+    return { error: "Enter your username and password." };
+  }
+
+  // A username that could not be one is sent to Auth as an address that cannot
+  // exist, so the failure takes the same path and the same time as a wrong
+  // password rather than returning early.
+  const email = emailForUsername(username) ?? `${crypto.randomUUID()}@invalid.invalid`;
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    console.warn("[signIn] failed for a submitted address");
+    console.warn("[signIn] failed for a submitted username");
     return { error: GENERIC_FAILURE };
   }
 

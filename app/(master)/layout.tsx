@@ -19,6 +19,13 @@ export default async function MasterLayout({ children }: { children: React.React
   if (!session) redirect("/login");
   if (!session.isMaster) redirect(homePathFor(session.role));
 
+  // An account still on the password a manager handed over goes nowhere else.
+  // Enforced in BOTH shells rather than in the proxy: the proxy sees a cookie,
+  // not a profile, and reading the flag there would mean a database round trip
+  // on every asset request. Here it is already loaded.
+  if (session.mustChangePassword) redirect("/change-password");
+
+
   const scope = resolveScope(session, null);
 
   return (

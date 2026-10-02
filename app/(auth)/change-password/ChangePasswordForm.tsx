@@ -2,9 +2,9 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { signInAction, type LoginState } from "@/lib/auth/actions";
+import { changePasswordAction, type PasswordState } from "@/lib/auth/password-actions";
 
-const initial: LoginState = { error: null };
+const initial: PasswordState = { error: null };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -14,34 +14,27 @@ function SubmitButton() {
       disabled={pending}
       className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2
                  rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white
-                 transition-colors duration-200 hover:bg-brand-700
-                 active:bg-brand-900
+                 transition-colors duration-200 hover:bg-brand-700 active:bg-brand-900
                  disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? (
         <>
-          {/* Something has to move while the network is slow, or the second tap
-              arrives and signs them in twice. */}
           <span
             aria-hidden
             className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
           />
-          Signing in…
+          Saving…
         </>
       ) : (
-        "Sign in"
+        "Save password"
       )}
     </button>
   );
 }
 
-export function LoginForm() {
-  const [state, formAction] = useActionState(signInAction, initial);
+export function ChangePasswordForm() {
+  const [state, formAction] = useActionState(changePasswordAction, initial);
 
-  // text-base, not text-sm, on both inputs. iOS zooms the whole page in when a
-  // focused field is under 16px, and the way back out is a pinch the person has
-  // to work out for themselves — on a phone held in one hand, outside, usually
-  // in a hurry. The 2px it costs in visual tidiness is not a trade.
   const field =
     "min-h-12 w-full rounded-xl border border-line bg-white px-3.5 py-3 text-base text-ink " +
     "placeholder:text-ink-faint transition-colors duration-200 " +
@@ -50,36 +43,35 @@ export function LoginForm() {
   return (
     <form action={formAction} className="space-y-5">
       <div className="space-y-1.5">
-        <label htmlFor="username" className="block text-sm font-semibold text-ink">
-          Username
-        </label>
-        <input
-          id="username"
-          name="username"
-          type="text"
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          required
-          className={field}
-          placeholder="e.g. JACK"
-        />
-        {/* Said once, here, because the alternative is a support call: the
-            field is not case sensitive and nobody should have to wonder. */}
-        <p className="text-xs text-ink-muted">Your name. Capitals do not matter.</p>
-      </div>
-
-      <div className="space-y-1.5">
         <label htmlFor="password" className="block text-sm font-semibold text-ink">
-          Password
+          New password
         </label>
         <input
           id="password"
           name="password"
           type="password"
-          autoComplete="current-password"
+          autoComplete="new-password"
           required
+          minLength={8}
+          className={field}
+        />
+        {/* The rule is stated before they can break it, not after. */}
+        <p className="text-xs text-ink-muted">
+          At least 8 characters. Not your phone number.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="confirm" className="block text-sm font-semibold text-ink">
+          Type it again
+        </label>
+        <input
+          id="confirm"
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
           className={field}
         />
       </div>
@@ -90,12 +82,7 @@ export function LoginForm() {
           className="flex items-start gap-2 rounded-xl border border-danger/25 bg-danger/5
                      px-3.5 py-3 text-sm font-medium text-danger"
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="mt-0.5 h-4 w-4 shrink-0"
-          >
+          <svg aria-hidden viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-4 w-4 shrink-0">
             <path
               fillRule="evenodd"
               d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0v-3.5Zm0 6.5a.75.75 0 0 0-1.5 0v.5a.75.75 0 0 0 1.5 0v-.5Z"
