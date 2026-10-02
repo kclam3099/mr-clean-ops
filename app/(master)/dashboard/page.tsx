@@ -8,6 +8,8 @@ import { RangeCalendar, resolveCalendar, toMonthEntries } from "@/components/das
 import { StaffDayStatusPanel } from "@/components/dashboard/StaffDayStatusPanel";
 import { getStaffDayStatus } from "@/lib/agenda/staff-status";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { getPendingLeaveForMaster } from "@/lib/leave/queries";
+import { LeaveApprovalsPanel } from "@/components/leave/LeaveApprovalsPanel";
 import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Dashboard — Mr Clean & Clean Ops" };
@@ -50,11 +52,13 @@ export default async function DashboardPage({
   // calendar's own (the same RLS-visible set as Quick Add), so the day agenda
   // can list a person with nothing booked without ever listing someone this
   // Master cannot see.
-  const [result, dayStatus, roster, colourRanks] = await Promise.all([
+  const [result, dayStatus, roster, colourRanks, pendingLeave] = await Promise.all([
     getMasterAgenda(session, scope, cal.queryRange),
     getStaffDayStatus(session, scope, today),
     getCalendarStaff(session, scope),
     getStaffColourRanks(),
+    // RLS returns only people this Master manages: KC sees Victor, Nick does not.
+    getPendingLeaveForMaster(session),
   ]);
   const staff = roster.map((s) => ({ ...s, colourIndex: colourRanks.get(s.id) ?? -1 }));
 
@@ -102,7 +106,12 @@ export default async function DashboardPage({
         staff={staff}
         detailHrefBase="/appointments"
         // Who is up and has seen today's work: the thing that needs acting on.
-        beforeGrid={dayStatus.ok ? <StaffDayStatusPanel rows={dayStatus.rows} /> : null}
+        beforeGrid={
+          <>
+            <LeaveApprovalsPanel requests={pendingLeave} />
+            {dayStatus.ok ? <StaffDayStatusPanel rows={dayStatus.rows} /> : null}
+          </>
+        }
       />
     </div>
   );

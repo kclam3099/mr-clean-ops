@@ -23,6 +23,7 @@ export async function StaffNav({ session }: { session: SessionContext }) {
     { path: "/my/today", label: t("Today") },
     { path: "/my/tomorrow", label: t("Tomorrow") },
     { path: "/my/month", label: t("Month") },
+    { path: "/my/leave", label: t("Leave") },
   ];
 
   return (
