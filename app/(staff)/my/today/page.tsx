@@ -7,12 +7,14 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { AcknowledgeToday } from "@/components/agenda/AcknowledgeToday";
 import { createClient } from "@/lib/supabase/serverClient";
 import { formatDateHeading } from "@/components/agenda/AgendaList";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Today — Mr Clean & Clean Ops" };
 
 export default async function TodayPage() {
   const session = await getSessionContext();
   if (!session) redirect("/login");
+  const { t, locale } = await getI18n();
 
   const today = businessToday();
   const result = await getStaffAgenda(session, singleDay(today));
@@ -36,14 +38,14 @@ export default async function TodayPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Today</h1>
-          <p className="text-sm text-slate-500">{formatDateHeading(today)}</p>
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("Today")}</h1>
+          <p className="text-sm text-slate-500">{formatDateHeading(today, locale)}</p>
         </div>
         <Link
           href="/my/appointments/new?return=today"
           className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
         >
-          + New
+          {t("+ New")}
         </Link>
       </div>
 
@@ -60,7 +62,7 @@ export default async function TodayPage() {
         <AgendaList
           appointments={result.appointments}
           detailHrefFor={(id) => `/my/appointments/${id}`}
-          emptyMessage="Nothing scheduled today."
+          emptyMessage={t("Nothing scheduled today.")}
           showDateHeadings={false}
           // A merged identity-scoped agenda: every job is this person's own,
           // across every workspace they belong to. The workspace is shown only

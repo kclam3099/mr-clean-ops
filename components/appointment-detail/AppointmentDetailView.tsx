@@ -19,6 +19,8 @@ import { colourAt, staffInitials } from "@/lib/agenda/staff-colour";
 import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
 } from "@/components/ui/icons";
+import { useT } from "@/components/i18n/I18nProvider";
+import type { Lang, TFunc } from "@/lib/i18n/core";
 
 type Panel = "none" | "customer" | "items" | "reschedule";
 /** Which action a pending override retry belongs to. */
@@ -34,6 +36,7 @@ export function AppointmentDetailView({
   backHref: string;
 }) {
   const router = useRouter();
+  const { t, lang } = useT();
   const [panel, setPanel] = useState<Panel>("none");
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -41,7 +44,11 @@ export function AppointmentDetailView({
   const [confirm, setConfirm] = useState<"cancel" | "complete" | null>(null);
 
   const terminal = detail.status !== "booked";
-  const fieldError = (n: string) => (result?.status === "error" ? result.fields?.[n] : undefined);
+  /** Server messages stay English in the action; they are translated only for display. */
+  const fieldError = (n: string) => {
+    const msg = result?.status === "error" ? result.fields?.[n] : undefined;
+    return msg === undefined ? undefined : translateFieldError(t, msg);
+  };
 
   /** Runs an action, then either closes the panel or opens the override dialog. */
   function run(
@@ -79,8 +86,12 @@ export function AppointmentDetailView({
 
       {terminal ? (
         <p className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
-          This appointment is {detail.status}. It is kept as history and can no longer be changed
-          {capabilities.canAddAddon ? " — add-ons can still be recorded below." : "."}
+          {t(
+            capabilities.canAddAddon
+              ? "This appointment is {status}. It is kept as history and can no longer be changed — add-ons can still be recorded below."
+              : "This appointment is {status}. It is kept as history and can no longer be changed.",
+            { status: statusText(detail.status, lang, t) },
+          )}
         </p>
       ) : null}
 
@@ -92,22 +103,22 @@ export function AppointmentDetailView({
       {!terminal ? (
         <div className="flex flex-wrap gap-2">
           {capabilities.canEditCustomer ? (
-            <Action label="Edit customer" active={panel === "customer"}
+            <Action label={t("Edit customer")} active={panel === "customer"}
               onClick={() => { setPanel(panel === "customer" ? "none" : "customer"); setResult(null); }} />
           ) : null}
           {capabilities.canEditItems ? (
-            <Action label="Edit services" active={panel === "items"}
+            <Action label={t("Edit services")} active={panel === "items"}
               onClick={() => { setPanel(panel === "items" ? "none" : "items"); setResult(null); }} />
           ) : null}
           {capabilities.canReschedule ? (
-            <Action label="Reschedule" active={panel === "reschedule"}
+            <Action label={t("Reschedule")} active={panel === "reschedule"}
               onClick={() => { setPanel(panel === "reschedule" ? "none" : "reschedule"); setResult(null); }} />
           ) : null}
           {capabilities.canComplete ? (
-            <Action label="Mark completed" onClick={() => setConfirm("complete")} />
+            <Action label={t("Mark completed")} onClick={() => setConfirm("complete")} />
           ) : null}
           {capabilities.canCancel ? (
-            <Action label="Cancel appointment" tone="danger" onClick={() => setConfirm("cancel")} />
+            <Action label={t("Cancel appointment")} tone="danger" onClick={() => setConfirm("cancel")} />
           ) : null}
         </div>
       ) : null}
@@ -167,6 +178,7 @@ export function AppointmentDetailView({
 function Header({ detail, showWorkspace, backHref }: {
   detail: AppointmentDetail; showWorkspace: boolean; backHref: string;
 }) {
+  const { t, locale } = useT();
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
@@ -181,7 +193,7 @@ function Header({ detail, showWorkspace, backHref }: {
             // ground with dark ink clears 4.5:1 and still shouts.
             <span className="flex items-center gap-1 rounded-full bg-gold px-2.5 py-0.5 text-xs font-bold text-brand-900">
               <StarIcon className="h-3 w-3" />
-              Large job
+              {t("Large job")}
             </span>
           ) : null}
         </div>
@@ -190,7 +202,7 @@ function Header({ detail, showWorkspace, backHref }: {
             <ClockIcon className="h-3.5 w-3.5 text-gold" />
             {detail.startTime}–{detail.endTime}
           </span>
-          <span>{formatDate(detail.date)}</span>
+          <span>{formatDate(detail.date, locale)}</span>
           {detail.staffName ? (
             <span
               className={`flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs font-semibold
@@ -215,7 +227,7 @@ function Header({ detail, showWorkspace, backHref }: {
       <a href={backHref}
         className="shrink-0 cursor-pointer rounded-lg border border-line bg-card px-3 py-2 text-sm
                    font-medium text-ink transition-colors duration-200 hover:bg-sunken">
-        Back
+        {t("Back")}
       </a>
     </div>
   );
@@ -230,6 +242,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
     }),
   );
   const chat = whatsappChatHref(detail.customerPhone);
+  const { t } = useT();
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-card">
       {/* Money and time first, on their own band. They are what gets checked
@@ -238,7 +251,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
       <div className="flex flex-wrap gap-x-6 gap-y-3 border-b-2 border-gold bg-sunken px-4 py-3">
         <div>
           <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-            <MoneyIcon className="h-3 w-3" /> Total
+            <MoneyIcon className="h-3 w-3" /> {t("Total")}
           </p>
           <p className="mt-0.5 text-xl font-bold tabular-nums text-brand">
             {formatMoney(detail.totalAmount)}
@@ -246,23 +259,23 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
         </div>
         <div>
           <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-            <ClockIcon className="h-3 w-3" /> Duration
+            <ClockIcon className="h-3 w-3" /> {t("Duration")}
           </p>
           <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
-            {formatDuration(detail.durationMin)}
+            {formatDuration(detail.durationMin, t)}
             <span className="ml-1 text-xs font-normal text-ink-faint">
-              +{detail.bufferMin}m buffer
+              {t("+{min}m buffer", { min: detail.bufferMin })}
             </span>
           </p>
         </div>
       </div>
 
       <dl className="grid gap-3 p-4 sm:grid-cols-2">
-        <Row label="Phone" value={detail.customerPhone ?? "—"} />
-        <Row label="Area" value={detail.areaCity ?? "—"} />
-        <Row label="Address" value={detail.addressLine ?? "—"} wide />
-        {showWorkspace ? <Row label="Workspace" value={detail.workspaceName ?? "—"} /> : null}
-        {detail.remarks ? <Row label="Notes" value={detail.remarks} wide /> : null}
+        <Row label={t("Phone")} value={detail.customerPhone ?? "—"} />
+        <Row label={t("Area")} value={detail.areaCity ?? "—"} />
+        <Row label={t("Address")} value={detail.addressLine ?? "—"} wide />
+        {showWorkspace ? <Row label={t("Workspace")} value={detail.workspaceName ?? "—"} /> : null}
+        {detail.remarks ? <Row label={t("Notes")} value={detail.remarks} wide /> : null}
       </dl>
       <div className="flex flex-wrap gap-2 border-t border-line bg-sunken/50 px-4 py-3">
         {/* Branded on purpose: the glyph and the green say which app opens,
@@ -273,7 +286,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
             className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#25D366] px-3.5
                        text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#1da851]">
             <WhatsAppIcon className="h-4 w-4" />
-            Reminder
+            {t("Reminder")}
           </a>
         ) : null}
         {/* The same app with nothing prefilled: for anything that is not the
@@ -292,7 +305,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
                        bg-card px-3.5 text-sm font-semibold text-ink transition-colors duration-200
                        hover:bg-sunken">
             <PhoneIcon className="h-4 w-4 text-ok" />
-            Call
+            {t("Call")}
           </a>
         ) : null}
         {maps ? (
@@ -301,7 +314,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
                        bg-card px-3.5 text-sm font-semibold text-ink transition-colors duration-200
                        hover:bg-sunken">
             <MapPinIcon className="h-4 w-4 text-danger" />
-            Directions
+            {t("Directions")}
           </a>
         ) : null}
       </div>
@@ -310,11 +323,12 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
 }
 
 function Items({ detail }: { detail: AppointmentDetail }) {
+  const { t } = useT();
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-card">
       <h2 className="flex items-center gap-2 bg-brand px-4 py-2.5 text-sm font-semibold text-white">
         <span aria-hidden className="h-4 w-1 rounded-full bg-gold" />
-        Services
+        {t("Services")}
       </h2>
       <ul className="divide-y divide-line">
         {detail.items.map((i) => (
@@ -328,7 +342,7 @@ function Items({ detail }: { detail: AppointmentDetail }) {
         ))}
       </ul>
       <div className="flex justify-between border-t-2 border-gold bg-sunken px-4 py-3 text-sm font-bold">
-        <span className="text-ink">Total</span>
+        <span className="text-ink">{t("Total")}</span>
         <span className="tabular-nums text-brand">{formatMoney(detail.totalAmount)}</span>
       </div>
     </section>
@@ -340,16 +354,17 @@ function CustomerPanel({ detail, pending, fieldError, onSubmit, onCancel }: {
   fieldError: (n: string) => string | undefined;
   onSubmit: (fd: FormData) => void; onCancel: () => void;
 }) {
+  const { t } = useT();
   return (
-    <Panel title="Edit customer" onCancel={onCancel}>
+    <Panel title={t("Edit customer")} onCancel={onCancel}>
       <form data-panel="customer" onSubmit={(e) => { e.preventDefault(); onSubmit(new FormData(e.currentTarget)); }}
         className="space-y-3">
         <input type="hidden" name="appointmentId" value={detail.id} />
-        <Field label="Name" name="customerName" defaultValue={detail.customerName} error={fieldError("customerName")} disabled={pending} />
-        <Field label="Phone / WhatsApp" name="customerPhone" defaultValue={detail.customerPhone ?? ""} error={fieldError("customerPhone")} disabled={pending} />
-        <Field label="Address" name="addressLine" defaultValue={detail.addressLine ?? ""} error={fieldError("addressLine")} disabled={pending} />
-        <Field label="Area / city" name="areaCity" defaultValue={detail.areaCity ?? ""} error={fieldError("areaCity")} disabled={pending} />
-        <Field label="Notes" name="remarks" defaultValue={detail.remarks ?? ""} error={fieldError("remarks")} disabled={pending} optional />
+        <Field label={t("Name")} name="customerName" defaultValue={detail.customerName} error={fieldError("customerName")} disabled={pending} />
+        <Field label={t("Phone / WhatsApp")} name="customerPhone" defaultValue={detail.customerPhone ?? ""} error={fieldError("customerPhone")} disabled={pending} />
+        <Field label={t("Address")} name="addressLine" defaultValue={detail.addressLine ?? ""} error={fieldError("addressLine")} disabled={pending} />
+        <Field label={t("Area / city")} name="areaCity" defaultValue={detail.areaCity ?? ""} error={fieldError("areaCity")} disabled={pending} />
+        <Field label={t("Notes")} name="remarks" defaultValue={detail.remarks ?? ""} error={fieldError("remarks")} disabled={pending} optional />
         <SaveRow pending={pending} onCancel={onCancel} />
       </form>
     </Panel>
@@ -371,9 +386,10 @@ function ItemsPanel({ detail, config, pending, fieldError, onSubmit, onCancel }:
 
   const total = subtotal(rows.map((r) => ({ quantity: Number(r.quantity), unitPrice: Number(r.unitPrice) })));
   const estimate = estimatedDurationMinutes(total, config.rmPerHourRate);
+  const { t } = useT();
 
   return (
-    <Panel title="Edit services" onCancel={onCancel}>
+    <Panel title={t("Edit services")} onCancel={onCancel}>
       <form data-panel="items" onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData();
@@ -389,12 +405,14 @@ function ItemsPanel({ detail, config, pending, fieldError, onSubmit, onCancel }:
         <ItemsEditor rows={rows} onChange={setRows}
           errors={(fieldError("items") ? { items: fieldError("items")! } : {})} disabled={pending} />
         <div className="flex justify-between rounded-lg bg-sunken px-3 py-2 text-sm">
-          <span className="text-ink-muted">New total</span>
+          <span className="text-ink-muted">{t("New total")}</span>
           <span className="font-semibold tabular-nums text-ink">{formatMoney(total)}</span>
         </div>
         <p className="text-xs text-ink-muted">
-          Estimated duration {formatDuration(estimate)}. The final duration and whether the new
-          time still fits are confirmed by the system when you save.
+          {t(
+            "Estimated duration {duration}. The final duration and whether the new time still fits are confirmed by the system when you save.",
+            { duration: formatDuration(estimate, t) },
+          )}
         </p>
         <SaveRow pending={pending} onCancel={onCancel} />
       </form>
@@ -422,14 +440,15 @@ function ReschedulePanel({ detail, pending, fieldError, onSubmit, onCancel }: {
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [date, detail.id]);
+  const { t } = useT();
 
   return (
-    <Panel title="Reschedule" onCancel={onCancel}>
+    <Panel title={t("Reschedule")} onCancel={onCancel}>
       <form data-panel="reschedule" onSubmit={(e) => { e.preventDefault(); onSubmit(new FormData(e.currentTarget)); }}
         className="space-y-3">
         <input type="hidden" name="appointmentId" value={detail.id} />
         <div className="space-y-1">
-          <label htmlFor="apptDate" className="block text-sm font-medium text-ink">Date</label>
+          <label htmlFor="apptDate" className="block text-sm font-medium text-ink">{t("Date")}</label>
           <input id="apptDate" name="apptDate" type="date" value={date}
             onChange={(e) => setDate(e.target.value)} disabled={pending} className={inputClass} />
           {fieldError("apptDate") ? <p className="text-sm text-red-600">{fieldError("apptDate")}</p> : null}
@@ -437,28 +456,28 @@ function ReschedulePanel({ detail, pending, fieldError, onSubmit, onCancel }: {
 
         {slots.key === date && slots.times.length ? (
           <div className="flex flex-wrap gap-2">
-            {slots.times.map((t) => (
-              <button key={t} type="button" onClick={() => setTime(t)} disabled={pending}
-                aria-pressed={time === t}
+            {slots.times.map((slot) => (
+              <button key={slot} type="button" onClick={() => setTime(slot)} disabled={pending}
+                aria-pressed={time === slot}
                 className={`rounded-lg border px-3 py-2 font-mono text-sm tabular-nums transition ${
-                  time === t ? "border-brand bg-brand text-white"
+                  time === slot ? "border-brand bg-brand text-white"
                              : "border-line bg-card text-ink hover:border-brand/50"}`}>
-                {t}
+                {slot}
               </button>
             ))}
           </div>
         ) : null}
         <p className="text-xs text-ink-muted">
-          Available when checked — final availability is confirmed when saving.
+          {t("Available when checked — final availability is confirmed when saving.")}
         </p>
 
         <div className="space-y-1">
-          <label htmlFor="startTime" className="block text-sm font-medium text-ink">Time</label>
+          <label htmlFor="startTime" className="block text-sm font-medium text-ink">{t("Time")}</label>
           <input id="startTime" name="startTime" type="time" value={time}
             onChange={(e) => setTime(e.target.value)} disabled={pending} className={inputClass} />
           {fieldError("startTime") ? <p className="text-sm text-red-600">{fieldError("startTime")}</p> : null}
         </div>
-        <SaveRow pending={pending} onCancel={onCancel} label="Reschedule" />
+        <SaveRow pending={pending} onCancel={onCancel} label={t("Reschedule")} />
       </form>
     </Panel>
   );
@@ -469,23 +488,24 @@ function ConfirmDialog({ kind, pending, onConfirm, onCancel }: {
   onConfirm: (reason?: string) => void; onCancel: () => void;
 }) {
   const [reason, setReason] = useState("");
+  const { t } = useT();
   const isCancel = kind === "cancel";
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="confirm-title"
       className="fixed inset-0 z-50 flex items-end justify-center bg-brand/40 p-4 sm:items-center">
       <div className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl">
         <h2 id="confirm-title" className="text-base font-semibold text-ink">
-          {isCancel ? "Cancel this appointment?" : "Mark this appointment completed?"}
+          {isCancel ? t("Cancel this appointment?") : t("Mark this appointment completed?")}
         </h2>
         <p className="mt-2 text-sm text-ink-muted">
           {isCancel
-            ? "It becomes history. It cannot be rescheduled, completed or restored afterwards."
-            : "It becomes history. It cannot be edited, rescheduled or cancelled afterwards."}
+            ? t("It becomes history. It cannot be rescheduled, completed or restored afterwards.")
+            : t("It becomes history. It cannot be edited, rescheduled or cancelled afterwards.")}
         </p>
         {isCancel ? (
           <>
             <label htmlFor="cancel-reason" className="mt-4 block text-sm font-medium text-ink">
-              Reason <span className="font-normal text-ink-faint">(optional)</span>
+              {t("Reason")} <span className="font-normal text-ink-faint">{t("(optional)")}</span>
             </label>
             <textarea id="cancel-reason" rows={2} value={reason} maxLength={500}
               onChange={(e) => setReason(e.target.value)}
@@ -496,13 +516,13 @@ function ConfirmDialog({ kind, pending, onConfirm, onCancel }: {
         <div className="mt-5 flex gap-2">
           <button type="button" onClick={onCancel} disabled={pending}
             className="flex-1 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-sunken">
-            Keep it
+            {t("Keep it")}
           </button>
           <button type="button" disabled={pending}
             onClick={() => onConfirm(isCancel ? reason.trim() || undefined : undefined)}
             className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-50 ${
               isCancel ? "bg-red-600 hover:bg-red-700" : "bg-brand hover:bg-brand-700"}`}>
-            {pending ? "Working…" : isCancel ? "Cancel appointment" : "Mark completed"}
+            {pending ? t("Working…") : isCancel ? t("Cancel appointment") : t("Mark completed")}
           </button>
         </div>
       </div>
@@ -517,11 +537,12 @@ const inputClass =
   "focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue";
 
 function Panel({ title, children, onCancel }: { title: string; children: React.ReactNode; onCancel: () => void }) {
+  const { t } = useT();
   return (
     <section className="rounded-xl border border-line bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
-        <button type="button" onClick={onCancel} className="text-sm text-ink-muted hover:text-ink">Close</button>
+        <button type="button" onClick={onCancel} className="text-sm text-ink-muted hover:text-ink">{t("Close")}</button>
       </div>
       {children}
     </section>
@@ -531,10 +552,11 @@ function Panel({ title, children, onCancel }: { title: string; children: React.R
 function Field({ label, name, defaultValue, error, disabled, optional }: {
   label: string; name: string; defaultValue: string; error?: string; disabled: boolean; optional?: boolean;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1">
       <label htmlFor={name} className="block text-sm font-medium text-ink">
-        {label}{optional ? <span className="ml-1 font-normal text-ink-faint">(optional)</span> : null}
+        {label}{optional ? <span className="ml-1 font-normal text-ink-faint">{t("(optional)")}</span> : null}
       </label>
       <input id={name} name={name} defaultValue={defaultValue} disabled={disabled} className={inputClass} />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -542,18 +564,19 @@ function Field({ label, name, defaultValue, error, disabled, optional }: {
   );
 }
 
-function SaveRow({ pending, onCancel, label = "Save changes" }: {
+function SaveRow({ pending, onCancel, label }: {
   pending: boolean; onCancel: () => void; label?: string;
 }) {
+  const { t } = useT();
   return (
     <div className="flex gap-2 pt-1">
       <button type="button" onClick={onCancel} disabled={pending}
         className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-sunken">
-        Cancel
+        {t("Cancel")}
       </button>
       <button type="submit" disabled={pending}
         className="flex-1 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-50">
-        {pending ? "Saving…" : label}
+        {pending ? t("Saving…") : (label ?? t("Save changes"))}
       </button>
     </div>
   );
@@ -583,6 +606,7 @@ function Row({ label, value, wide }: { label: string; value: string; wide?: bool
 }
 
 function StatusBadge({ status }: { status: AppointmentDetail["status"] }) {
+  const { t, lang } = useT();
   const styles = {
     booked: "bg-blue-100 text-blue-800",
     completed: "bg-green-100 text-green-800",
@@ -590,14 +614,34 @@ function StatusBadge({ status }: { status: AppointmentDetail["status"] }) {
   } as const;
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status]}`}>
-      {status}
+      {statusText(status, lang, t)}
     </span>
   );
 }
 
-function formatDate(iso: string): string {
+/**
+ * The status word as shown. English renders the raw value exactly as before
+ * (capitalised by CSS in the badge); Chinese uses the dictionary label.
+ */
+const STATUS_LABEL: Record<AppointmentDetail["status"], string> = {
+  booked: "Booked",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+function statusText(status: AppointmentDetail["status"], lang: Lang, t: TFunc): string {
+  return lang === "zh" ? t(STATUS_LABEL[status]) : status;
+}
+
+/** Field errors arrive in English from the server action; translated for display only. */
+function translateFieldError(t: TFunc, msg: string): string {
+  const max = /^Keep this under (\d+) characters$/.exec(msg);
+  return max ? t("Keep this under {max} characters", { max: max[1] as string }) : t(msg);
+}
+
+function formatDate(iso: string, locale: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(new Date(Date.UTC(y as number, (m as number) - 1, d as number)));
 }

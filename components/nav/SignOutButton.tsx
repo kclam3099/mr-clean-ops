@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { signOutAction } from "@/lib/auth/actions";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * Signing out must destroy the document, not just the session.
@@ -21,6 +22,7 @@ import { signOutAction } from "@/lib/auth/actions";
  * built-in origin check rather than exposing a CSRF-able logout endpoint.
  */
 export function SignOutButton({ className = "" }: { className?: string }) {
+  const { t } = useT();
   const [pending, startTransition] = useTransition();
 
   return (
@@ -44,7 +46,7 @@ export function SignOutButton({ className = "" }: { className?: string }) {
                   text-sm font-medium text-white/80 transition-colors duration-200
                   hover:bg-white/15 hover:text-white disabled:opacity-60 ${className}`}
     >
-      {pending ? "Signing out…" : "Sign out"}
+      {pending ? t("Signing out…") : t("Sign out")}
     </button>
   );
 }

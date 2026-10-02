@@ -13,6 +13,7 @@ import { AvailabilitySuggestions } from "./AvailabilitySuggestions";
 import { OverrideDialog } from "./OverrideDialog";
 import { PastAppointmentDialog } from "./PastAppointmentDialog";
 import { isPastDateTime } from "@/lib/appointments/message-parser";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * One form for both roles. `context.mode` decides what renders; the server
@@ -37,6 +38,7 @@ export function AppointmentForm({
   businessNow: string;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const isMaster = context.mode === "master";
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -187,10 +189,10 @@ export function AppointmentForm({
       >
         <div className="min-w-0 space-y-6">
           {/* ---------------- A. Booking context ---------------- */}
-          <Section title="Booking context">
+          <Section title={t("Booking context")}>
             {isMaster ? (
               context.needsWorkspaceChoice ? (
-                <Field label="Workspace" htmlFor="workspaceId" error={fieldError("workspaceId")}>
+                <Field label={t("Workspace")} htmlFor="workspaceId" error={fieldError("workspaceId")}>
                   <select
                     id="workspaceId"
                     value={workspaceId}
@@ -198,7 +200,7 @@ export function AppointmentForm({
                     disabled={pending}
                     className={selectClass}
                   >
-                    <option value="">Choose a workspace…</option>
+                    <option value="">{t("Choose a workspace…")}</option>
                     {context.workspaces.map((w) => (
                       <option key={w.id} value={w.id}>{w.name}</option>
                     ))}
@@ -208,7 +210,9 @@ export function AppointmentForm({
                 // Exactly one workspace: a label, never a one-option selector.
                 // A selector would imply there are others.
                 <p className="text-sm text-slate-600">
-                  Workspace: <span className="font-medium text-slate-900">{workspace?.name}</span>
+                  <Slot text={t("Workspace: {name}")}>
+                    <span className="font-medium text-slate-900">{workspace?.name}</span>
+                  </Slot>
                 </p>
               )
             ) : (
@@ -216,7 +220,7 @@ export function AppointmentForm({
             )}
 
             {isMaster ? (
-              <Field label="Team member" htmlFor="staffId" error={fieldError("staffId")}>
+              <Field label={t("Team member")} htmlFor="staffId" error={fieldError("staffId")}>
                 <select
                   id="staffId"
                   value={staffId}
@@ -224,7 +228,7 @@ export function AppointmentForm({
                   disabled={pending || !workspaceId}
                   className={selectClass}
                 >
-                  <option value="">{workspaceId ? "Choose a team member…" : "Choose a workspace first"}</option>
+                  <option value="">{workspaceId ? t("Choose a team member…") : t("Choose a workspace first")}</option>
                   {staffOptions.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -234,26 +238,26 @@ export function AppointmentForm({
           </Section>
 
           {/* ---------------- B. Customer ---------------- */}
-          <Section title="Customer">
-            <Field label="Name" htmlFor="customerName" error={fieldError("customerName")}>
+          <Section title={t("Customer")}>
+            <Field label={t("Name")} htmlFor="customerName" error={fieldError("customerName")}>
               <input id="customerName" name="customerName" disabled={pending} className={inputClass} />
             </Field>
-            <Field label="Phone / WhatsApp" htmlFor="customerPhone" error={fieldError("customerPhone")}>
+            <Field label={t("Phone / WhatsApp")} htmlFor="customerPhone" error={fieldError("customerPhone")}>
               <input id="customerPhone" name="customerPhone" type="tel" inputMode="tel" disabled={pending} className={inputClass} />
             </Field>
-            <Field label="Address" htmlFor="addressLine" error={fieldError("addressLine")}>
+            <Field label={t("Address")} htmlFor="addressLine" error={fieldError("addressLine")}>
               <input id="addressLine" name="addressLine" disabled={pending} className={inputClass} />
             </Field>
-            <Field label="Area / city" htmlFor="areaCity" error={fieldError("areaCity")}>
+            <Field label={t("Area / city")} htmlFor="areaCity" error={fieldError("areaCity")}>
               <input id="areaCity" name="areaCity" disabled={pending} className={inputClass} />
             </Field>
-            <Field label="Notes" htmlFor="remarks" error={fieldError("remarks")} optional>
+            <Field label={t("Notes")} htmlFor="remarks" error={fieldError("remarks")} optional>
               <textarea id="remarks" name="remarks" rows={2} disabled={pending} className={inputClass} />
             </Field>
           </Section>
 
           {/* ---------------- C. Job items ---------------- */}
-          <Section title="Services">
+          <Section title={t("Services")}>
             <ItemsEditor
               rows={items}
               onChange={setItems}
@@ -263,9 +267,9 @@ export function AppointmentForm({
           </Section>
 
           {/* ---------------- D. Date & time ---------------- */}
-          <Section title="Date & time">
+          <Section title={t("Date & time")}>
             <QuickDates value={apptDate} onPick={setApptDate} businessToday={businessToday} disabled={pending} />
-            <Field label="Date" htmlFor="apptDate" error={fieldError("apptDate")}>
+            <Field label={t("Date")} htmlFor="apptDate" error={fieldError("apptDate")}>
               <input
                 id="apptDate" type="date" value={apptDate}
                 // No `min`: a past date is now selectable, and confirmed at
@@ -280,7 +284,7 @@ export function AppointmentForm({
               onPick={setStartTime} disabled={pending}
             />
 
-            <Field label="Time" htmlFor="startTime" error={fieldError("startTime")}>
+            <Field label={t("Time")} htmlFor="startTime" error={fieldError("startTime")}>
               <input
                 id="startTime" type="time" value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -293,14 +297,13 @@ export function AppointmentForm({
         {/* ---------------- E. Review & save ---------------- */}
         <aside className="min-w-0 lg:sticky lg:top-6 lg:self-start">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Summary</h2>
+            <h2 className="text-sm font-semibold text-slate-900">{t("Summary")}</h2>
             <dl className="mt-3 space-y-2 text-sm">
-              <Row label="Total" value={formatMoney(total)} strong />
-              <Row label="Estimated duration" value={formatDuration(estimate)} />
+              <Row label={t("Total")} value={formatMoney(total)} strong />
+              <Row label={t("Estimated duration")} value={formatDuration(estimate, t)} />
             </dl>
             <p className="mt-2 text-xs text-slate-500">
-              Estimated only. The final duration and availability are confirmed by the
-              system when you save.
+              {t("Estimated only. The final duration and availability are confirmed by the system when you save.")}
             </p>
 
             {result?.status === "error" && !overrideFor ? (
@@ -315,7 +318,7 @@ export function AppointmentForm({
               className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white
                          transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {pending ? "Saving…" : "Save appointment"}
+              {pending ? t("Saving…") : t("Save appointment")}
             </button>
           </div>
         </aside>
@@ -364,16 +367,26 @@ function Field({
 }: {
   label: string; htmlFor: string; error?: string; optional?: boolean; children: React.ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div className="space-y-1">
       <label htmlFor={htmlFor} className="block text-sm font-medium text-slate-700">
         {label}
-        {optional ? <span className="ml-1 font-normal text-slate-400">(optional)</span> : null}
+        {optional ? <span className="ml-1 font-normal text-slate-400">{t("(optional)")}</span> : null}
       </label>
       {children}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-red-600">{t(error)}</p> : null}
     </div>
   );
+}
+
+/**
+ * Renders a translated sentence whose single `{name}` placeholder is a styled
+ * element, so the word order can follow the language.
+ */
+function Slot({ text, children }: { text: string; children: React.ReactNode }) {
+  const [before, after] = text.split("{name}");
+  return <>{before}{children}{after}</>;
 }
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
@@ -399,19 +412,22 @@ function StaffContext({
   context: BookingContext; workspaceId: string;
   setWorkspaceId: (v: string) => void; pending: boolean;
 }) {
+  const { t } = useT();
   return (
     <>
       <p className="text-sm text-slate-600">
-        Booking for <span className="font-medium text-slate-900">{context.selfStaffName ?? "you"}</span>
+        <Slot text={t("Booking for {name}")}>
+          <span className="font-medium text-slate-900">{context.selfStaffName ?? t("you")}</span>
+        </Slot>
       </p>
       {context.needsWorkspaceChoice ? (
-        <Field label="Workspace" htmlFor="workspaceId">
+        <Field label={t("Workspace")} htmlFor="workspaceId">
           <select
             id="workspaceId" value={workspaceId}
             onChange={(e) => setWorkspaceId(e.target.value)}
             disabled={pending} className={selectClass}
           >
-            <option value="">Choose a workspace…</option>
+            <option value="">{t("Choose a workspace…")}</option>
             {context.workspaces.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
@@ -427,6 +443,7 @@ function QuickDates({
 }: {
   value: string; onPick: (d: string) => void; businessToday: string; disabled: boolean;
 }) {
+  const { t } = useT();
   const add = (days: number) => {
     const [y, m, d] = businessToday.split("-").map(Number);
     const dt = new Date(Date.UTC(y!, m! - 1, d!));
@@ -455,7 +472,7 @@ function QuickDates({
               : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
           }`}
         >
-          {label}
+          {t(label)}
         </button>
       ))}
     </div>

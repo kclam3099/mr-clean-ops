@@ -3,11 +3,13 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { signInAction, type LoginState } from "@/lib/auth/actions";
+import { useT } from "@/components/i18n/I18nProvider";
 
 const initial: LoginState = { error: null };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
+  const { t } = useT();
   return (
     <button
       type="submit"
@@ -26,10 +28,10 @@ function SubmitButton() {
             aria-hidden
             className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
           />
-          Signing in…
+          {t("Signing in…")}
         </>
       ) : (
-        "Sign in"
+        t("Sign in")
       )}
     </button>
   );
@@ -37,6 +39,7 @@ function SubmitButton() {
 
 export function LoginForm() {
   const [state, formAction] = useActionState(signInAction, initial);
+  const { t } = useT();
 
   // text-base, not text-sm, on both inputs. iOS zooms the whole page in when a
   // focused field is under 16px, and the way back out is a pinch the person has
@@ -51,7 +54,7 @@ export function LoginForm() {
     <form action={formAction} className="space-y-5">
       <div className="space-y-1.5">
         <label htmlFor="username" className="block text-sm font-semibold text-ink">
-          Username
+          {t("Username")}
         </label>
         <input
           id="username"
@@ -63,16 +66,16 @@ export function LoginForm() {
           spellCheck={false}
           required
           className={field}
-          placeholder="e.g. JACK"
+          placeholder={t("e.g. JACK")}
         />
         {/* Said once, here, because the alternative is a support call: the
             field is not case sensitive and nobody should have to wonder. */}
-        <p className="text-xs text-ink-muted">Your name. Capitals do not matter.</p>
+        <p className="text-xs text-ink-muted">{t("Your name. Capitals do not matter.")}</p>
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="password" className="block text-sm font-semibold text-ink">
-          Password
+          {t("Password")}
         </label>
         <input
           id="password"
@@ -102,7 +105,7 @@ export function LoginForm() {
               clipRule="evenodd"
             />
           </svg>
-          {state.error}
+          {t(state.error)}
         </p>
       ) : null}
 

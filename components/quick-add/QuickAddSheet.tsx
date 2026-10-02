@@ -18,6 +18,8 @@ import { PastAppointmentDialog } from "@/components/appointment-form/PastAppoint
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { AppErrorCode, type AppError } from "@/lib/errors/appError";
 import { subtotal, formatMoney } from "@/lib/pricing/duration";
+import { useT } from "@/components/i18n/I18nProvider";
+import type { Lang, TFunc } from "@/lib/i18n/core";
 
 /**
  * Quick Add — paste the WhatsApp message, check it, tap a staff member.
@@ -104,6 +106,7 @@ export function QuickAddSheet({
   onSuccess: (message: string) => void;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const [context, setContext] = useState<QuickAddContext | null>(null);
   const [step, setStep] = useState<Step>("paste");
   const [rawText, setRawText] = useState("");
@@ -248,7 +251,11 @@ export function QuickAddSheet({
     setPending(false);
 
     if (result.status === "success") {
-      onSuccess(`Assigned to ${result.staffName}`);
+      // The server's fallbacks are English words, not names; real names pass
+      // through untouched.
+      const name = result.staffName === "you" || result.staffName === "the team member"
+        ? t(result.staffName) : result.staffName;
+      onSuccess(t("Assigned to {name}", { name }));
       router.refresh();
       onClose();
       return;
@@ -300,11 +307,11 @@ export function QuickAddSheet({
     ) : null;
 
   const heading =
-    step === "paste" ? "New appointment"
-    : step === "review" ? "Review"
-    : step === "details" ? "Appointment details"
-    : step === "assign" ? "Assign to"
-    : "Which team?";
+    step === "paste" ? t("New appointment")
+    : step === "review" ? t("Review")
+    : step === "details" ? t("Appointment details")
+    : step === "assign" ? t("Assign to")
+    : t("Which team?");
 
   return (
     <div
@@ -321,7 +328,7 @@ export function QuickAddSheet({
         <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <h2 id="quick-add-title" className="text-base font-semibold text-slate-900">{heading}</h2>
           <button
-            type="button" onClick={onClose} disabled={pending} aria-label="Close"
+            type="button" onClick={onClose} disabled={pending} aria-label={t("Close")}
             className="rounded-lg px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-100"
           >
             ✕
@@ -330,10 +337,10 @@ export function QuickAddSheet({
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {context === null ? (
-            <p className="text-sm text-slate-500" aria-busy="true">Loading…</p>
+            <p className="text-sm text-slate-500" aria-busy="true">{t("Loading…")}</p>
           ) : context.mode === "unavailable" ? (
             <p className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-              There is no workspace with active team members available to you.
+              {t("There is no workspace with active team members available to you.")}
             </p>
           ) : (
             <>
@@ -394,7 +401,9 @@ export function QuickAddSheet({
         {context && context.mode !== "unavailable" && step === "details" ? (
           <footer className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-3">
             <p className="mb-2 text-sm text-slate-500">
-              Estimated total <span className="font-medium text-slate-800">{formatMoney(total)}</span>
+              <Slot text={t("Estimated total {amount}")} slot="{amount}">
+                <span className="font-medium text-slate-800">{formatMoney(total)}</span>
+              </Slot>
             </p>
             <button
               type="button"
@@ -408,12 +417,14 @@ export function QuickAddSheet({
                          transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isStaffMode
-                ? (pending ? "Saving…" : "Save appointment")
-                : rawText ? "Back to review" : "Assign staff →"}
+                ? (pending ? t("Saving…") : t("Save appointment"))
+                : rawText ? t("Back to review") : t("Assign staff →")}
             </button>
             {issues.length > 0 ? (
               <p className="mt-2 text-center text-xs text-slate-500">
-                {issues.length} detail{issues.length === 1 ? "" : "s"} still needed.
+                {issues.length === 1
+                  ? t("1 detail still needed.")
+                  : t("{count} details still needed.", { count: issues.length })}
               </p>
             ) : null}
           </footer>
@@ -462,11 +473,12 @@ function PasteStep({
   const ref = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(value);
   const [tried, setTried] = useState(false);
+  const { t } = useT();
 
   return (
     <div className="space-y-3">
       <label htmlFor="qa-paste" className="block text-sm font-medium text-slate-700">
-        Paste the appointment message
+        {t("Paste the appointment message")}
       </label>
       <textarea
         id="qa-paste"
@@ -491,8 +503,7 @@ function PasteStep({
 
       {tried && text.trim() ? (
         <p className="text-sm text-amber-800">
-          That does not look like an appointment message yet. Check it, press
-          Detect, or enter the details yourself.
+          {t("That does not look like an appointment message yet. Check it, press Detect, or enter the details yourself.")}
         </p>
       ) : null}
 
@@ -504,18 +515,18 @@ function PasteStep({
           className="min-h-11 rounded-xl bg-slate-900 px-5 text-sm font-medium text-white
                      transition hover:bg-slate-800 disabled:opacity-50"
         >
-          Detect appointment
+          {t("Detect appointment")}
         </button>
         <button
           type="button"
           onClick={onManual}
           className="-my-2 py-2 text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
         >
-          Enter manually instead
+          {t("Enter manually instead")}
         </button>
       </div>
       <p className="text-xs text-slate-500">
-        Pasting detects the details automatically.
+        {t("Pasting detects the details automatically.")}
       </p>
     </div>
   );
@@ -540,6 +551,7 @@ function ReviewStep({
   onSave: () => void;
 }) {
   const ready = issues.length === 0;
+  const { t, lang, locale } = useT();
 
   return (
     <div className="space-y-4">
@@ -548,8 +560,8 @@ function ReviewStep({
         <p className="text-sm text-slate-600">{details.customerPhone || "—"}</p>
 
         <p className="mt-3 font-medium text-slate-900">
-          {details.apptDate ? longDate(details.apptDate) : "Date needed"}
-          {details.startTime ? ` · ${friendlyTime(details.startTime)}` : ""}
+          {details.apptDate ? longDate(details.apptDate, locale) : t("Date needed")}
+          {details.startTime ? ` · ${friendlyTime(details.startTime, t)}` : ""}
         </p>
         {/* Informational only. A historical job is recordable — it just asks
             for one deliberate confirmation at the moment of saving. */}
@@ -557,10 +569,10 @@ function ReviewStep({
           <p data-past-badge
              className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs
                         font-medium text-amber-900">
-            Past appointment
+            {t("Past appointment")}
           </p>
         ) : null}
-        <p className="text-sm text-slate-600">{details.areaCity || "Area needed"}</p>
+        <p className="text-sm text-slate-600">{details.areaCity || t("Area needed")}</p>
 
         <ul className="mt-3 space-y-1 border-t border-slate-100 pt-3">
           {details.items
@@ -574,7 +586,7 @@ function ReviewStep({
               </li>
             ))}
           <li className="flex justify-between gap-3 border-t border-slate-100 pt-1 text-sm font-medium">
-            <span>Total</span>
+            <span>{t("Total")}</span>
             <span className="tabular-nums">{formatMoney(total)}</span>
           </li>
         </ul>
@@ -595,14 +607,14 @@ function ReviewStep({
             className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700
                        transition hover:bg-slate-50"
           >
-            Edit
+            {t("Edit")}
           </button>
           {onBackToMessage ? (
             <button
               type="button" onClick={onBackToMessage}
               className="-my-2 py-2 text-sm text-slate-500 underline underline-offset-2 hover:text-slate-900"
             >
-              Back to message
+              {t("Back to message")}
             </button>
           ) : null}
         </div>
@@ -611,15 +623,19 @@ function ReviewStep({
       {!ready ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm font-medium text-amber-900">
-            Please confirm {issues.length} detail{issues.length === 1 ? "" : "s"}
+            {issues.length === 1
+              ? t("Please confirm 1 detail")
+              : t("Please confirm {count} details", { count: issues.length })}
           </p>
-          <p className="mt-1 text-sm text-amber-800">{issues.map(label).join(", ")}</p>
+          <p className="mt-1 text-sm text-amber-800">
+            {issues.map((f) => label(f, t)).join(listSeparator(lang))}
+          </p>
           <button
             type="button" onClick={onEdit} data-confirm-details
             className="mt-3 min-h-11 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white
                        transition hover:bg-slate-800"
           >
-            Confirm {issues.length === 1 ? "it" : "them"}
+            {issues.length === 1 ? t("Confirm it") : t("Confirm them")}
           </button>
         </div>
       ) : staffMode ? (
@@ -628,11 +644,11 @@ function ReviewStep({
           className="w-full rounded-xl bg-slate-900 px-4 py-3 text-base font-medium text-white
                      transition hover:bg-slate-800 disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Save appointment"}
+          {saving ? t("Saving…") : t("Save appointment")}
         </button>
       ) : (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-slate-700">Assign to</h3>
+          <h3 className="mb-2 text-sm font-medium text-slate-700">{t("Assign to")}</h3>
           {assign}
         </div>
       )}
@@ -640,30 +656,45 @@ function ReviewStep({
   );
 }
 
-function label(field: ParsedField): string {
-  return {
+function label(field: ParsedField, t: TFunc): string {
+  return t({
     customerName: "customer name", phone: "phone", address: "address",
     areaCity: "area / city", date: "date", time: "time", items: "service and price",
-  }[field];
+  }[field]);
 }
 
-function longDate(iso: string): string {
+/** ", " in English; the Chinese enumeration comma in Chinese. */
+function listSeparator(lang: Lang): string {
+  return lang === "zh" ? "、" : ", ";
+}
+
+function longDate(iso: string, locale: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "short", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(d);
 }
 
-function friendlyTime(hhmm: string): string {
+function friendlyTime(hhmm: string, t: TFunc): string {
   const [h, m] = hhmm.split(":").map(Number);
   if (!Number.isFinite(h)) return hhmm;
-  const suffix = (h as number) < 12 ? "AM" : "PM";
   const hour = (h as number) % 12 === 0 ? 12 : (h as number) % 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+  const vars = { hour, min: String(m).padStart(2, "0") };
+  return (h as number) < 12 ? t("{hour}:{min} AM", vars) : t("{hour}:{min} PM", vars);
+}
+
+/**
+ * Renders a translated sentence whose `slot` placeholder is a styled element,
+ * so the word order can follow the language.
+ */
+function Slot({ text, slot, children }: { text: string; slot: string; children: React.ReactNode }) {
+  const [before, after] = text.split(slot);
+  return <>{before}{children}{after}</>;
 }
 
 function Summary({ details, total, onEdit }: { details: Details; total: number; onEdit: () => void }) {
+  const { t } = useT();
   return (
     <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -677,7 +708,7 @@ function Summary({ details, total, onEdit }: { details: Details; total: number; 
           type="button" onClick={onEdit}
           className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700"
         >
-          Edit
+          {t("Edit")}
         </button>
       </div>
     </div>
@@ -693,6 +724,7 @@ function DetailsStep({
   highlight: Set<string>;
   disabled: boolean;
 }) {
+  const { t } = useT();
   const set = (patch: Partial<Details>) => setDetails({ ...details, ...patch });
   const cls = (name: string) =>
     "w-full rounded-lg px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 " +
@@ -701,44 +733,44 @@ function DetailsStep({
 
   return (
     <div className="space-y-4">
-      <Field label="Customer name" htmlFor="qa-name" error={fields.customerName} flagged={highlight.has("customerName")}>
+      <Field label={t("Customer name")} htmlFor="qa-name" error={fields.customerName} flagged={highlight.has("customerName")}>
         <input id="qa-name" name="customerName" className={cls("customerName")} disabled={disabled}
           value={details.customerName} onChange={(e) => set({ customerName: e.target.value })} />
       </Field>
-      <Field label="Phone / WhatsApp" htmlFor="qa-phone" error={fields.customerPhone} flagged={highlight.has("customerPhone")}>
+      <Field label={t("Phone / WhatsApp")} htmlFor="qa-phone" error={fields.customerPhone} flagged={highlight.has("customerPhone")}>
         <input id="qa-phone" name="customerPhone" type="tel" inputMode="tel" className={cls("customerPhone")}
           disabled={disabled} value={details.customerPhone}
           onChange={(e) => set({ customerPhone: e.target.value })} />
       </Field>
       {/* A textarea, because pasted addresses are routinely multiline. */}
-      <Field label="Address" htmlFor="qa-address" error={fields.addressLine} flagged={highlight.has("addressLine")}>
+      <Field label={t("Address")} htmlFor="qa-address" error={fields.addressLine} flagged={highlight.has("addressLine")}>
         <textarea id="qa-address" name="addressLine" rows={3} className={cls("addressLine")} disabled={disabled}
           value={details.addressLine} onChange={(e) => set({ addressLine: e.target.value })} />
       </Field>
-      <Field label="Area / city" htmlFor="qa-area" error={fields.areaCity} flagged={highlight.has("areaCity")}>
+      <Field label={t("Area / city")} htmlFor="qa-area" error={fields.areaCity} flagged={highlight.has("areaCity")}>
         <input id="qa-area" name="areaCity" className={cls("areaCity")} disabled={disabled}
           value={details.areaCity} onChange={(e) => set({ areaCity: e.target.value })} />
       </Field>
 
       <div>
-        <p className="mb-2 text-sm font-medium text-slate-700">Services</p>
+        <p className="mb-2 text-sm font-medium text-slate-700">{t("Services")}</p>
         <ItemsEditor rows={details.items} onChange={(items) => set({ items })} errors={fields} disabled={disabled} />
       </div>
 
       <div className="flex gap-3">
-        <Field label="Date" htmlFor="qa-date" error={fields.apptDate} flagged={highlight.has("apptDate")}>
+        <Field label={t("Date")} htmlFor="qa-date" error={fields.apptDate} flagged={highlight.has("apptDate")}>
           {/* No `min`: a past date is recordable, confirmed at save time. */}
           <input id="qa-date" name="apptDate" type="date" className={cls("apptDate")}
             disabled={disabled} value={details.apptDate}
             onChange={(e) => set({ apptDate: e.target.value })} />
         </Field>
-        <Field label="Time" htmlFor="qa-time" error={fields.startTime} flagged={highlight.has("startTime")}>
+        <Field label={t("Time")} htmlFor="qa-time" error={fields.startTime} flagged={highlight.has("startTime")}>
           <input id="qa-time" name="startTime" type="time" className={cls("startTime")} disabled={disabled}
             value={details.startTime} onChange={(e) => set({ startTime: e.target.value })} />
         </Field>
       </div>
 
-      <Field label="Remarks (optional)" htmlFor="qa-remarks" error={fields.remarks}>
+      <Field label={t("Remarks (optional)")} htmlFor="qa-remarks" error={fields.remarks}>
         <textarea id="qa-remarks" name="remarks" rows={2} className={cls("remarks")} disabled={disabled}
           value={details.remarks} onChange={(e) => set({ remarks: e.target.value })} />
       </Field>
@@ -759,6 +791,7 @@ function AssignStep({
   pendingFor: string | null;
   onPick: (s: QuickAddStaffOption) => void;
 }) {
+  const { t } = useT();
   return (
     <div>
       <ul className="space-y-3">
@@ -773,14 +806,14 @@ function AssignStep({
             >
               <span>{s.name}</span>
               <span className="text-sm font-normal text-slate-500">
-                {pendingFor === s.id ? "Booking…" : "Assign"}
+                {pendingFor === s.id ? t("Booking…") : t("Assign")}
               </span>
             </button>
           </li>
         ))}
       </ul>
       <p className="mt-3 text-xs text-slate-500">
-        Choosing a team member books the appointment straight away.
+        {t("Choosing a team member books the appointment straight away.")}
       </p>
     </div>
   );
@@ -795,9 +828,10 @@ function WorkspaceStep({
   disabled: boolean;
   onPick: (id: string) => void;
 }) {
+  const { t } = useT();
   return (
     <div>
-      <p className="mb-3 text-sm text-slate-600">Which team should this appointment belong to?</p>
+      <p className="mb-3 text-sm text-slate-600">{t("Which team should this appointment belong to?")}</p>
       <ul className="space-y-3">
         {options.map((w) => (
           <li key={w.id}>
@@ -821,14 +855,15 @@ function Field({
 }: {
   label: string; htmlFor: string; error?: string; flagged?: boolean; children: React.ReactNode;
 }) {
+  const { t } = useT();
   return (
     <div className="min-w-0 flex-1">
       <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium text-slate-700">
         {text}
-        {flagged ? <span className="ml-2 text-xs font-normal text-amber-700">needs confirmation</span> : null}
+        {flagged ? <span className="ml-2 text-xs font-normal text-amber-700">{t("needs confirmation")}</span> : null}
       </label>
       {children}
-      {error ? <p className="mt-1 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-1 text-sm text-red-600">{t(error)}</p> : null}
     </div>
   );
 }

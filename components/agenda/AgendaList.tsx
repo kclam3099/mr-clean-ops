@@ -1,13 +1,14 @@
 import { groupByDate, type AgendaAppointment } from "@/lib/agenda/queries";
 import { AppointmentCard } from "./AppointmentCard";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * Date-grouped agenda list. This is the primary mobile/staff presentation —
  * scannable cards rather than a compressed desktop calendar grid.
  */
-export function AgendaList({
+export async function AgendaList({
   appointments,
-  emptyMessage = "Nothing scheduled.",
+  emptyMessage,
   showStaff = false,
   showWorkspace = false,
   showAmount = true,
@@ -23,10 +24,11 @@ export function AgendaList({
   /** Builds the detail link for a card; omit to render non-clickable cards. */
   detailHrefFor?: (id: string) => string;
 }) {
+  const { t, locale } = await getI18n();
   if (appointments.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
-        {emptyMessage}
+        {emptyMessage ?? t("Nothing scheduled.")}
       </p>
     );
   }
@@ -39,7 +41,7 @@ export function AgendaList({
         <section key={g.date} className="space-y-3">
           {showDateHeadings ? (
             <h2 className="sticky top-0 bg-slate-50/95 py-1 text-sm font-semibold text-slate-700 backdrop-blur">
-              {formatDateHeading(g.date)}
+              {formatDateHeading(g.date, locale)}
             </h2>
           ) : null}
           <div className="space-y-3">
@@ -60,9 +62,9 @@ export function AgendaList({
   );
 }
 
-export function formatDateHeading(isoDate: string): string {
+export function formatDateHeading(isoDate: string, locale = "en-GB"): string {
   const [y, m, d] = isoDate.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long",
     day: "numeric",
     month: "short",

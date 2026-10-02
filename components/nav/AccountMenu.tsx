@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { SignOutButton } from "./SignOutButton";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * The account menu: who you are, and the two things you can do about it.
@@ -13,6 +14,7 @@ import { SignOutButton } from "./SignOutButton";
  * staff member who later wanted to change theirs had no way to.
  */
 export function AccountMenu({ name }: { name: string }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -67,7 +69,7 @@ export function AccountMenu({ name }: { name: string }) {
                      border border-line bg-card py-1 shadow-xl shadow-brand-900/20"
         >
           <p className="truncate px-3 py-2 text-xs text-ink-faint">
-            Signed in as <span className="font-semibold text-ink">{name}</span>
+            {t("Signed in as")} <span className="font-semibold text-ink">{name}</span>
           </p>
           <div className="h-px bg-line" />
           <Link
@@ -77,7 +79,7 @@ export function AccountMenu({ name }: { name: string }) {
             className="flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium
                        text-ink transition-colors duration-200 hover:bg-sunken"
           >
-            Change password
+            {t("Change password")}
           </Link>
           <div className="h-px bg-line" />
           <SignOutButton className="w-full justify-start !text-danger hover:!bg-danger/10" />

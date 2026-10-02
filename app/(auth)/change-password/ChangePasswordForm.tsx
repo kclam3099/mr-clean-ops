@@ -3,11 +3,13 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { changePasswordAction, type PasswordState } from "@/lib/auth/password-actions";
+import { useT } from "@/components/i18n/I18nProvider";
 
 const initial: PasswordState = { error: null };
 
 function SubmitButton() {
   const { pending } = useFormStatus();
+  const { t } = useT();
   return (
     <button
       type="submit"
@@ -23,10 +25,10 @@ function SubmitButton() {
             aria-hidden
             className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
           />
-          Saving…
+          {t("Saving…")}
         </>
       ) : (
-        "Save password"
+        t("Save password")
       )}
     </button>
   );
@@ -34,6 +36,7 @@ function SubmitButton() {
 
 export function ChangePasswordForm() {
   const [state, formAction] = useActionState(changePasswordAction, initial);
+  const { t } = useT();
 
   const field =
     "min-h-12 w-full rounded-xl border border-line bg-white px-3.5 py-3 text-base text-ink " +
@@ -44,7 +47,7 @@ export function ChangePasswordForm() {
     <form action={formAction} className="space-y-5">
       <div className="space-y-1.5">
         <label htmlFor="password" className="block text-sm font-semibold text-ink">
-          New password
+          {t("New password")}
         </label>
         <input
           id="password"
@@ -57,13 +60,13 @@ export function ChangePasswordForm() {
         />
         {/* The rule is stated before they can break it, not after. */}
         <p className="text-xs text-ink-muted">
-          At least 8 characters. Not your phone number.
+          {t("At least 8 characters. Not your phone number.")}
         </p>
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="confirm" className="block text-sm font-semibold text-ink">
-          Type it again
+          {t("Type it again")}
         </label>
         <input
           id="confirm"
@@ -89,7 +92,7 @@ export function ChangePasswordForm() {
               clipRule="evenodd"
             />
           </svg>
-          {state.error}
+          {t(state.error)}
         </p>
       ) : null}
 

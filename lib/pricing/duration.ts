@@ -29,13 +29,19 @@ export function estimatedDurationMinutes(total: number, rmPerHourRate: number): 
   return Math.max(1, Math.ceil((total / rmPerHourRate) * 60));
 }
 
-export function formatDuration(minutes: number): string {
+export function formatDuration(
+  minutes: number,
+  // Optional translator (lib/i18n): without one the output is the English it
+  // always was. Typed structurally so this module stays free of i18n imports.
+  t: (text: string, vars?: Record<string, string | number>) => string = (s, v) =>
+    s.replace(/\{(\w+)\}/g, (_, k: string) => String(v?.[k] ?? "")),
+): string {
   if (minutes <= 0) return "—";
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return h === 1 ? "1 hour" : `${h} hours`;
-  return `${h}h ${m}m`;
+  if (h === 0) return t("{m} min", { m });
+  if (m === 0) return h === 1 ? t("1 hour") : t("{h} hours", { h });
+  return t("{h}h {m}m", { h, m });
 }
 
 export function formatMoney(amount: number): string {

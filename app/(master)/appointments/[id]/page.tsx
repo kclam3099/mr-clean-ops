@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getAppointmentDetail, capabilitiesFor } from "@/lib/appointments/detail";
 import { getBookingConfig } from "@/lib/booking-config/queries";
 import { AppointmentDetailView } from "@/components/appointment-detail/AppointmentDetailView";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Appointment — Mr Clean & Clean Ops" };
 
@@ -43,18 +44,19 @@ export default async function MasterAppointmentDetailPage({
   );
 }
 
-function NotAvailable({ backHref }: { backHref: string }) {
+async function NotAvailable({ backHref }: { backHref: string }) {
+  const { t } = await getI18n();
   return (
     <div className="mx-auto max-w-md py-16 text-center">
-      <h1 className="text-lg font-semibold text-slate-900">Appointment not available</h1>
+      <h1 className="text-lg font-semibold text-slate-900">{t("Appointment not available")}</h1>
       <p className="mt-2 text-sm text-slate-600">
-        This appointment does not exist, or is no longer available.
+        {t("This appointment does not exist, or is no longer available.")}
       </p>
       <Link
         href={backHref}
         className="mt-6 inline-block rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
       >
-        Back to calendar
+        {t("Back to calendar")}
       </Link>
     </div>
   );

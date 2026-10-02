@@ -6,6 +6,7 @@ import { buildCustomerMessage, type RangePreset } from "@/lib/availability/custo
 import { MAX_RANGE_DAYS } from "@/lib/availability/constants";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import type { AppError } from "@/lib/errors/appError";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * "When are you available?" — answered as a message, not a report.
@@ -30,6 +31,7 @@ export function CustomerAvailability({
   businessToday: string;
   maxDate: string;
 }) {
+  const { t } = useT();
   const initial = presets.find((p) => p.key === initialPreset) ?? presets[0]!;
   const [preset, setPreset] = useState<RangePreset>(initial.key);
   const [from, setFrom] = useState(initial.from);
@@ -41,8 +43,8 @@ export function CustomerAvailability({
 
   useEffect(() => {
     if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 2500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setCopied(false), 2500);
+    return () => clearTimeout(timer);
   }, [copied]);
 
   async function search(nextPreset: RangePreset, nextFrom: string, nextTo: string) {
@@ -72,7 +74,7 @@ export function CustomerAvailability({
   return (
     <div className="space-y-5">
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="text-sm font-medium text-slate-700">When</p>
+        <p className="text-sm font-medium text-slate-700">{t("When")}</p>
         <div className="flex flex-wrap gap-2">
           {presets.map((p) => (
             <button
@@ -96,10 +98,10 @@ export function CustomerAvailability({
         </div>
 
         <details className="text-sm">
-          <summary className="-my-2 cursor-pointer py-2 text-slate-600">Custom dates</summary>
+          <summary className="-my-2 cursor-pointer py-2 text-slate-600">{t("Custom dates")}</summary>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="text-sm">
-              <span className="mb-1 block text-slate-600">From</span>
+              <span className="mb-1 block text-slate-600">{t("From")}</span>
               <input
                 type="date" value={from} min={businessToday} max={maxDate}
                 onChange={(e) => setFrom(e.target.value)}
@@ -107,7 +109,7 @@ export function CustomerAvailability({
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-slate-600">To</span>
+              <span className="mb-1 block text-slate-600">{t("To")}</span>
               <input
                 type="date" value={to} min={from} max={maxDate}
                 onChange={(e) => setTo(e.target.value)}
@@ -121,9 +123,9 @@ export function CustomerAvailability({
               className="min-h-11 rounded-lg bg-slate-900 px-5 text-sm font-medium text-white
                          transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {pending ? "Checking…" : "Check"}
+              {pending ? t("Checking…") : t("Check")}
             </button>
-            <p className="w-full text-xs text-slate-500">Up to {MAX_RANGE_DAYS} days at a time.</p>
+            <p className="w-full text-xs text-slate-500">{t("Up to {count} days at a time.", { count: MAX_RANGE_DAYS })}</p>
           </div>
         </details>
       </div>
@@ -131,7 +133,7 @@ export function CustomerAvailability({
       {error ? <ErrorNotice error={error} /> : null}
 
       {pending && message === null ? (
-        <p className="text-sm text-slate-500" aria-busy="true">Checking availability…</p>
+        <p className="text-sm text-slate-500" aria-busy="true">{t("Checking availability…")}</p>
       ) : message !== null ? (
         <div className="rounded-2xl border border-slate-200 bg-white">
           {/* A textarea rather than a <pre>: it keeps the exact text selectable
@@ -148,7 +150,7 @@ export function CustomerAvailability({
           />
           <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
             <span aria-live="polite" className="text-sm text-slate-500">
-              {copied ? "Copied" : "Ready to send"}
+              {copied ? t("Copied") : t("Ready to send")}
             </span>
             <button
               type="button"
@@ -157,14 +159,14 @@ export function CustomerAvailability({
               className="min-h-11 rounded-lg bg-slate-900 px-5 text-sm font-medium text-white
                          transition hover:bg-slate-800"
             >
-              {copied ? "Copied" : "Copy message"}
+              {copied ? t("Copied") : t("Copy message")}
             </button>
           </div>
         </div>
       ) : null}
 
       <p className="text-xs text-slate-500">
-        Suggested for a standard job. Final availability is confirmed when saving.
+        {t("Suggested for a standard job. Final availability is confirmed when saving.")}
       </p>
     </div>
   );

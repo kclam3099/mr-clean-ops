@@ -36,7 +36,8 @@
     "db:create-prod": "node scripts/create-prod-project.mjs",
     "deploy:prod": "node scripts/deploy-vercel-prod.mjs",
     "test:ack": "node supabase/tests/staff-acknowledgement-regression.mjs",
-    "db:check-conn": "node scripts/check-db-connections.mjs"
+    "db:check-conn": "node scripts/check-db-connections.mjs",
+    "i18n:check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",

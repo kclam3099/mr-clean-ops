@@ -6,6 +6,7 @@ import { CustomerAvailability } from "@/components/availability/CustomerAvailabi
 import { findCustomerAvailabilityAction } from "@/lib/availability/queries";
 import { buildCustomerMessage } from "@/lib/availability/customer-message";
 import type { RangePreset } from "@/lib/availability/customer-message";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Available times — Mr Clean & Clean Ops" };
 
@@ -22,6 +23,7 @@ export default async function AvailabilityPage() {
   const session = await getSessionContext();
   if (!session) redirect("/login");
 
+  const { t } = await getI18n();
   const today = businessToday();
   const thisWeek = weekRange(today);
   const nextWeek = weekRange(addDays(thisWeek.from, 7));
@@ -33,10 +35,10 @@ export default async function AvailabilityPage() {
   const cap = (d: string) => (d > horizon ? horizon : d);
 
   const presets: Array<{ key: RangePreset; label: string; from: string; to: string }> = [
-    { key: "today", label: "Today", from: today, to: today },
-    { key: "tomorrow", label: "Tomorrow", from: addDays(today, 1), to: addDays(today, 1) },
-    { key: "thisWeek", label: "This week", from: clamp(thisWeek.from), to: cap(thisWeek.to) },
-    { key: "nextWeek", label: "Next week", from: clamp(nextWeek.from), to: cap(nextWeek.to) },
+    { key: "today", label: t("Today"), from: today, to: today },
+    { key: "tomorrow", label: t("Tomorrow"), from: addDays(today, 1), to: addDays(today, 1) },
+    { key: "thisWeek", label: t("This week"), from: clamp(thisWeek.from), to: cap(thisWeek.to) },
+    { key: "nextWeek", label: t("Next week"), from: clamp(nextWeek.from), to: cap(nextWeek.to) },
   ];
 
   // The commonest question is "this week", so answer it before the page paints
@@ -52,9 +54,9 @@ export default async function AvailabilityPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">Available times</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("Available times")}</h1>
         <p className="text-sm text-slate-500">
-          Copy the message and send it to the customer.
+          {t("Copy the message and send it to the customer.")}
         </p>
       </div>
 

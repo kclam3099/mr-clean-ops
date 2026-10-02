@@ -1,6 +1,7 @@
 "use client";
 
 import { formatMoney } from "@/lib/pricing/duration";
+import { useT } from "@/components/i18n/I18nProvider";
 
 export type ItemRow = { key: string; description: string; quantity: string; unitPrice: string };
 
@@ -36,6 +37,7 @@ export function ItemsEditor({
   errors: Record<string, string>;
   disabled: boolean;
 }) {
+  const { t } = useT();
   const update = (key: string, patch: Partial<ItemRow>) =>
     onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
@@ -48,7 +50,7 @@ export function ItemsEditor({
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <label className="sr-only" htmlFor={`desc-${row.key}`}>
-                Service description
+                {t("Service description")}
               </label>
               <input
                 id={`desc-${row.key}`}
@@ -56,7 +58,7 @@ export function ItemsEditor({
                 value={row.description}
                 onChange={(e) => update(row.key, { description: e.target.value })}
                 disabled={disabled}
-                placeholder="Service (e.g. Sofa cleaning)"
+                placeholder={t("Service (e.g. Sofa cleaning)")}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-base text-slate-900
                            placeholder:text-slate-400 focus:border-slate-900 focus:outline-none
                            focus:ring-1 focus:ring-slate-900"
@@ -67,11 +69,11 @@ export function ItemsEditor({
                 type="button"
                 onClick={() => onChange(rows.filter((r) => r.key !== row.key))}
                 disabled={disabled}
-                aria-label={`Remove item ${index + 1}`}
+                aria-label={t("Remove item {n}", { n: index + 1 })}
                 className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600
                            transition hover:bg-slate-50"
               >
-                Remove
+                {t("Remove")}
               </button>
             ) : null}
           </div>
@@ -79,7 +81,7 @@ export function ItemsEditor({
           <div className="mt-2 flex items-end gap-2">
             <div className="w-24">
               <label htmlFor={`qty-${row.key}`} className="block text-xs text-slate-500">
-                Qty
+                {t("Qty")}
               </label>
               <input
                 id={`qty-${row.key}`}
@@ -94,7 +96,7 @@ export function ItemsEditor({
             </div>
             <div className="w-32">
               <label htmlFor={`price-${row.key}`} className="block text-xs text-slate-500">
-                Unit price (RM)
+                {t("Unit price (RM)")}
               </label>
               <input
                 id={`price-${row.key}`}
@@ -114,10 +116,10 @@ export function ItemsEditor({
           </div>
 
           {errors[`items.${index}.description`] ? (
-            <p className="mt-1 text-sm text-red-600">{errors[`items.${index}.description`]}</p>
+            <p className="mt-1 text-sm text-red-600">{t(errors[`items.${index}.description`]!)}</p>
           ) : null}
           {errors[`items.${index}.unitPrice`] ? (
-            <p className="mt-1 text-sm text-red-600">{errors[`items.${index}.unitPrice`]}</p>
+            <p className="mt-1 text-sm text-red-600">{t(errors[`items.${index}.unitPrice`]!)}</p>
           ) : null}
         </div>
       ))}
@@ -129,10 +131,10 @@ export function ItemsEditor({
         className="w-full rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm
                    font-medium text-slate-600 transition hover:border-slate-400 hover:bg-white"
       >
-        + Add another service
+        {t("+ Add another service")}
       </button>
 
-      {errors["items"] ? <p className="text-sm text-red-600">{errors["items"]}</p> : null}
+      {errors["items"] ? <p className="text-sm text-red-600">{t(errors["items"])}</p> : null}
     </div>
   );
 }

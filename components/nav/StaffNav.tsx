@@ -1,7 +1,9 @@
 import Image from "next/image";
 import type { SessionContext } from "@/lib/auth/session";
 import { AccountMenu } from "./AccountMenu";
+import { LanguageToggle } from "@/components/i18n/LanguageToggle";
 import { NavLink } from "./NavLink";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * Staff navigation — mobile-first, and deliberately WITHOUT a workspace
@@ -14,11 +16,12 @@ import { NavLink } from "./NavLink";
  * Workspace only becomes a choice when an operation needs attribution — and
  * that choice lives inside the Add Appointment form, not in navigation.
  */
-export function StaffNav({ session }: { session: SessionContext }) {
+export async function StaffNav({ session }: { session: SessionContext }) {
+  const { t } = await getI18n();
   const links = [
-    { path: "/my/today", label: "Today" },
-    { path: "/my/tomorrow", label: "Tomorrow" },
-    { path: "/my/month", label: "Month" },
+    { path: "/my/today", label: t("Today") },
+    { path: "/my/tomorrow", label: t("Tomorrow") },
+    { path: "/my/month", label: t("Month") },
   ];
 
   return (
@@ -39,7 +42,8 @@ export function StaffNav({ session }: { session: SessionContext }) {
         <span className="truncate text-sm font-semibold tracking-tight text-white">
           {session.fullName}
         </span>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <LanguageToggle />
           <AccountMenu name={session.fullName} />
         </div>
       </div>

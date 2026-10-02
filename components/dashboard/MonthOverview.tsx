@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { compactMoney } from "@/lib/pricing/duration";
 import { colourAt, staffBadgeLetter } from "@/lib/agenda/staff-colour";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * The dashboard's month operations overview.
@@ -59,9 +60,9 @@ function shortAmount(amount: number): string {
   return String(Math.round(amount));
 }
 
-function longDay(iso: string): string {
+function longDay(iso: string, locale: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     weekday: "long", day: "numeric", month: "short", timeZone: "UTC",
   }).format(new Date(Date.UTC(y as number, (m as number) - 1, d as number)));
 }
@@ -87,6 +88,7 @@ export function MonthOverview({
 }) {
   // Seven dates is a week, forty-two is a month. Derived rather than passed,
   // so the two cannot disagree about which one is being drawn.
+  const { t, lang, locale } = useT();
   const isWeek = days.length <= 7;
   const visiblePerCell = isWeek ? 8 : VISIBLE_PER_CELL;
 
@@ -149,7 +151,7 @@ export function MonthOverview({
               key={w}
               className="px-2 py-2 text-center text-[10px] font-bold tracking-widest text-white/80"
             >
-              {w}
+              {t(w)}
             </div>
           ))}
         </div>
@@ -186,7 +188,9 @@ export function MonthOverview({
                   {list.length > 0 ? (
                     <span
                       data-day-total={date}
-                      title={`${list.length} appointment${list.length === 1 ? "" : "s"} booked`}
+                      title={list.length === 1
+                        ? t("{count} appointment booked", { count: list.length })
+                        : t("{count} appointments booked", { count: list.length })}
                       className={`ml-auto mr-0.5 rounded px-1 font-semibold tabular-nums
                                   ${isWeek ? "py-0.5 text-[12px]" : "text-[10px]"}
                                   ${outside && !isWeek ? "text-ink-faint" : "bg-brand/10 text-brand"}`}
@@ -199,7 +203,7 @@ export function MonthOverview({
                     type="button"
                     data-add-on={date}
                     onClick={() => openQuickAdd(date)}
-                    aria-label={`New appointment on ${longDay(date)}`}
+                    aria-label={t("New appointment on {date}", { date: longDay(date, locale) })}
                     className="cursor-pointer rounded text-[15px] leading-none text-ink-faint opacity-0
                                transition hover:bg-brand/10 hover:text-brand focus-visible:opacity-100
                                group-hover:opacity-100"
@@ -223,7 +227,7 @@ export function MonthOverview({
                     className="mt-0.5 w-full rounded px-1 py-0.5 text-left text-[10px] font-medium
                                text-ink-muted hover:bg-sunken hover:text-brand"
                   >
-                    +{hidden} more
+                    {t("+{count} more", { count: hidden })}
                   </button>
                 ) : null}
 
@@ -231,16 +235,16 @@ export function MonthOverview({
                   <div
                     data-day-popover={date}
                     role="dialog"
-                    aria-label={`Appointments on ${longDay(date)}`}
+                    aria-label={t("Appointments on {date}", { date: longDay(date, locale) })}
                     className="absolute left-1 right-1 top-8 z-30 rounded-lg border border-line
                                bg-white p-2 shadow-xl"
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold text-ink">{longDay(date)}</p>
+                      <p className="text-[11px] font-semibold text-ink">{longDay(date, locale)}</p>
                       <button
                         type="button"
                         onClick={() => setOpenDay(null)}
-                        aria-label="Close"
+                        aria-label={t("Close")}
                         className="cursor-pointer rounded px-1 text-xs text-ink-faint hover:bg-sunken hover:text-brand"
                       >
                         ✕
@@ -269,7 +273,7 @@ export function MonthOverview({
           <div className="grid grid-cols-7 border-b border-line bg-brand">
             {WEEKDAYS.map((w) => (
               <div key={w} className="py-1.5 text-center text-[10px] font-bold tracking-wider text-white/80">
-                {w.slice(0, 1)}
+                {lang === "zh" ? t(w).slice(-1) : w.slice(0, 1)}
               </div>
             ))}
           </div>
@@ -287,8 +291,10 @@ export function MonthOverview({
                   data-selected={isSelected ? "true" : undefined}
                   onClick={() => setSelectedDay(date)}
                   aria-pressed={isSelected}
-                  aria-label={`${longDay(date)}, ${count} appointment${count === 1 ? "" : "s"}${
-                    count > 0 ? `, ${compactMoney(dayTotal(date))} booked` : ""}`}
+                  aria-label={`${count === 1
+                    ? t("{date}, {count} appointment", { date: longDay(date, locale), count })
+                    : t("{date}, {count} appointments", { date: longDay(date, locale), count })}${
+                    count > 0 ? t(", {amount} booked", { amount: compactMoney(dayTotal(date)) }) : ""}`}
                   className={`flex min-h-[2.75rem] cursor-pointer flex-col items-center justify-center
                               gap-0.5 border-b border-r border-line/70 py-1 transition
                               last:border-r-0
@@ -325,7 +331,7 @@ export function MonthOverview({
         <div className="mt-3" data-day-agenda={selectedDay}>
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-ink">
-              {longDay(selectedDay)}
+              {longDay(selectedDay, locale)}
               {selectedEntries.length > 0 ? (
                 <span data-selected-day-total className="ml-2 font-semibold tabular-nums text-brand">
                   {compactMoney(selectedTotal)}
@@ -342,7 +348,7 @@ export function MonthOverview({
               className="flex min-h-8 items-center rounded-lg border border-line bg-white px-3
                          text-xs font-medium text-ink transition hover:bg-sunken"
             >
-              + New appointment
+              {t("+ New appointment")}
             </button>
           </div>
           {selectedGroups.length === 0 ? (
@@ -350,7 +356,7 @@ export function MonthOverview({
             // conflicts are invisible here by design, so "free" would be a lie.
             <p className="rounded-lg border border-dashed border-line px-3 py-6 text-center
                           text-xs text-ink-faint">
-              Nothing scheduled.
+              {t("Nothing scheduled.")}
             </p>
           ) : (
             // One block per person, everyone on the roster included, so "who
@@ -369,16 +375,16 @@ export function MonthOverview({
                     ) : null}
                     <span className={`truncate text-xs font-semibold
                                       ${g.name ? colourAt(g.colourIndex).text : "text-ink-muted"}`}>
-                      {g.name ?? "Unassigned"}
+                      {g.name ?? t("Unassigned")}
                     </span>
                     {g.entries.length > 0 ? (
                       <span className="ml-auto shrink-0 text-[11px] font-semibold tabular-nums text-ink-muted">
-                        {g.entries.length} · {compactMoney(g.entries.reduce((t, e) => t + (e.totalAmount ?? 0), 0))}
+                        {g.entries.length} · {compactMoney(g.entries.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0))}
                       </span>
                     ) : null}
                   </div>
                   {g.entries.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-ink-faint">No appointment</p>
+                    <p className="px-2 py-2 text-xs text-ink-faint">{t("No appointment")}</p>
                   ) : (
                     <div className="space-y-1 p-1">
                       {g.entries.map((e) => (
@@ -434,6 +440,7 @@ function MonthEntryRow({
   /** Inside a per-person group the name is already the heading. */
   hideStaff?: boolean;
 }) {
+  const { t } = useT();
   return (
     <Link
       href={href}
@@ -455,7 +462,7 @@ function MonthEntryRow({
             className="ml-auto shrink-0 self-center rounded bg-gold px-1 text-[9px] font-bold
                        tracking-wide text-brand-900"
           >
-            LARGE
+            {t("LARGE")}
           </span>
         ) : null}
       </span>

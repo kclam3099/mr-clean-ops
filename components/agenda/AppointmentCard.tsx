@@ -6,6 +6,8 @@ import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
   CheckIcon, BanIcon,
 } from "@/components/ui/icons";
+import { getI18n } from "@/lib/i18n/server";
+import type { TFunc } from "@/lib/i18n/core";
 
 /**
  * The shared appointment card, used by both the Master calendar and the Staff
@@ -26,7 +28,7 @@ import {
  * name has room to actually be read. The full card is for agenda lists, where
  * the row is wide and the actions are the point.
  */
-export function AppointmentCard({
+export async function AppointmentCard({
   appointment: a,
   showStaff = false,
   showWorkspace = false,
@@ -44,6 +46,7 @@ export function AppointmentCard({
   /** When given, the card body links through to the appointment detail. */
   detailHref?: string;
 }) {
+  const { t } = await getI18n();
   const maps = mapsHref(a.addressLine, a.areaCity);
   const whatsapp = whatsappHref(
     a.customerPhone,
@@ -91,7 +94,7 @@ export function AppointmentCard({
               >
                 {a.customerName}
               </h3>
-              <StatusBadge status={a.status} compact={compact} />
+              <StatusBadge status={a.status} compact={compact} t={t} />
             </div>
 
             {/* ---- the facts line: duration, money, large job ---- */}
@@ -101,7 +104,7 @@ export function AppointmentCard({
             >
               <span className="flex items-center gap-1 text-ink-muted">
                 <ClockIcon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-                {a.durationMin}m
+                {t("{count}m", { count: a.durationMin })}
               </span>
               {showAmount && a.totalAmount !== null ? (
                 <span className="flex items-center gap-1 font-semibold text-ink">
@@ -112,7 +115,7 @@ export function AppointmentCard({
               {a.isLargeJob ? (
                 <span className="flex items-center gap-1 rounded-full bg-amber/20 px-1.5 py-0.5 font-semibold text-warn">
                   <StarIcon className="h-3 w-3" />
-                  Large
+                  {t("Large")}
                 </span>
               ) : null}
             </div>
@@ -177,7 +180,7 @@ export function AppointmentCard({
                          transition-colors duration-200 hover:bg-[#1da851]"
             >
               <WhatsAppIcon className="h-4 w-4" />
-              Reminder
+              {t("Reminder")}
             </a>
           ) : null}
           {chat ? (
@@ -202,7 +205,7 @@ export function AppointmentCard({
                          text-ink transition-colors duration-200 hover:bg-sunken"
             >
               <PhoneIcon className="h-3.5 w-3.5 text-ok" />
-              Call
+              {t("Call")}
             </a>
           ) : null}
           {maps ? (
@@ -215,7 +218,7 @@ export function AppointmentCard({
                          text-ink transition-colors duration-200 hover:bg-sunken"
             >
               <MapPinIcon className="h-3.5 w-3.5 text-danger" />
-              Directions
+              {t("Directions")}
             </a>
           ) : null}
         </div>
@@ -245,14 +248,16 @@ function CardLink({ href, children }: { href?: string; children: React.ReactNode
 function StatusBadge({
   status,
   compact,
+  t,
 }: {
   status: AgendaAppointment["status"];
   compact: boolean;
+  t: TFunc;
 }) {
   const styles: Record<AgendaAppointment["status"], { chip: string; label: string }> = {
-    booked: { chip: "bg-brand/10 text-brand", label: "Booked" },
-    completed: { chip: "bg-ok/15 text-ok", label: "Done" },
-    cancelled: { chip: "bg-sunken text-ink-muted", label: "Cancelled" },
+    booked: { chip: "bg-brand/10 text-brand", label: t("Booked") },
+    completed: { chip: "bg-ok/15 text-ok", label: t("Done") },
+    cancelled: { chip: "bg-sunken text-ink-muted", label: t("Cancelled") },
   };
   const s = styles[status];
 

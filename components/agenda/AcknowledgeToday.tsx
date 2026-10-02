@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { acknowledgeTodayAction } from "@/lib/agenda/acknowledge-actions";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * The staff-side half of the morning status.
@@ -17,6 +18,7 @@ export function AcknowledgeToday({
   jobCount: number;
   acknowledged: boolean;
 }) {
+  const { t } = useT();
   const [done, setDone] = useState(acknowledged);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -33,7 +35,7 @@ export function AcknowledgeToday({
             clipRule="evenodd"
           />
         </svg>
-        Thanks — your manager can see you&apos;re ready today.
+        {t("Thanks — your manager can see you're ready today.")}
       </p>
     );
   }
@@ -61,11 +63,13 @@ export function AcknowledgeToday({
               aria-hidden
               className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
             />
-            Saving…
+            {t("Saving…")}
           </>
         ) : (
           <>
-            I&apos;ve seen today&apos;s {jobCount === 1 ? "job" : `${jobCount} jobs`}
+            {jobCount === 1
+              ? t("I've seen today's job")
+              : t("I've seen today's {count} jobs", { count: jobCount })}
           </>
         )}
       </button>

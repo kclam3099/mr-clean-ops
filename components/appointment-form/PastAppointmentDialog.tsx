@@ -1,5 +1,8 @@
 "use client";
 
+import { useT } from "@/components/i18n/I18nProvider";
+import type { TFunc } from "@/lib/i18n/core";
+
 /**
  * Confirmation for recording a job that already happened.
  *
@@ -27,6 +30,7 @@ export function PastAppointmentDialog({
   onCancel: () => void;
   pending: boolean;
 }) {
+  const { t, locale } = useT();
   return (
     <div
       role="dialog"
@@ -36,17 +40,17 @@ export function PastAppointmentDialog({
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
         <h2 id="past-appointment-title" className="text-base font-semibold text-slate-900">
-          Past appointment
+          {t("Past appointment")}
         </h2>
 
-        <p className="mt-2 text-sm text-slate-600">This appointment is in the past:</p>
+        <p className="mt-2 text-sm text-slate-600">{t("This appointment is in the past:")}</p>
 
         <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm
                       font-medium text-amber-900">
-          {formatLong(date)} · {formatTime(time)}
+          {formatLong(date, locale)} · {formatTime(time, t)}
         </p>
 
-        <p className="mt-3 text-sm text-slate-600">Record this appointment anyway?</p>
+        <p className="mt-3 text-sm text-slate-600">{t("Record this appointment anyway?")}</p>
 
         <div className="mt-5 flex gap-2">
           <button
@@ -56,7 +60,7 @@ export function PastAppointmentDialog({
             className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium
                        text-slate-700 transition hover:bg-slate-50"
           >
-            Go back
+            {t("Go back")}
           </button>
           <button
             type="button"
@@ -66,7 +70,7 @@ export function PastAppointmentDialog({
             className="flex-1 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-medium text-white
                        transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "Recording…" : "Record past appointment"}
+            {pending ? t("Recording…") : t("Record past appointment")}
           </button>
         </div>
       </div>
@@ -74,18 +78,18 @@ export function PastAppointmentDialog({
   );
 }
 
-function formatLong(iso: string): string {
+function formatLong(iso: string, locale: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
   }).format(d);
 }
 
-function formatTime(hhmm: string): string {
+function formatTime(hhmm: string, t: TFunc): string {
   const [h, m] = hhmm.split(":").map(Number);
   if (!Number.isFinite(h)) return hhmm;
-  const suffix = (h as number) < 12 ? "AM" : "PM";
   const hour = (h as number) % 12 === 0 ? 12 : (h as number) % 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+  const vars = { hour, min: String(m).padStart(2, "0") };
+  return (h as number) < 12 ? t("{hour}:{min} AM", vars) : t("{hour}:{min} PM", vars);
 }

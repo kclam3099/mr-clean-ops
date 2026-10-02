@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { AgendaAppointment, DateRange } from "@/lib/agenda/queries";
 import { addDays } from "@/lib/agenda/queries";
 import { AppointmentCard } from "./AppointmentCard";
+import { getI18n } from "@/lib/i18n/server";
+import type { TFunc } from "@/lib/i18n/core";
 
 export type CalendarStaff = { id: string; name: string };
 
@@ -20,7 +22,7 @@ export type CalendarStaff = { id: string; name: string };
  * neutral dash and an add affordance, and the authoritative answer comes from
  * find_available_slots() and ultimately from create_appointment().
  */
-export function StaffWeekGrid({
+export async function StaffWeekGrid({
   appointments,
   staff,
   range,
@@ -40,6 +42,7 @@ export function StaffWeekGrid({
   detailHrefFor: (id: string) => string;
   highlightId?: string;
 }) {
+  const { t, locale } = await getI18n();
   const days: string[] = [];
   for (let d = range.from; d <= range.to; d = addDays(d, 1)) days.push(d);
 
@@ -57,18 +60,17 @@ export function StaffWeekGrid({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[56rem] border-separate border-spacing-0">
         <caption className="sr-only">
-          Appointments by team member for the week of {range.from}. An empty cell
-          means no appointment is visible to you, not that the team member is free.
+          {t("Appointments by team member for the week of {date}. An empty cell means no appointment is visible to you, not that the team member is free.", { date: range.from })}
         </caption>
         <thead>
           <tr>
             <th scope="col" className="sticky left-0 z-10 w-28 bg-slate-50 px-2 pb-2 text-left text-xs
                                        font-semibold uppercase tracking-wide text-slate-500">
-              Team
+              {t("Team")}
             </th>
             {days.map((date) => (
               <th key={date} scope="col" className="px-1 pb-2 text-left align-bottom">
-                <DayHeading date={date} isToday={date === today} />
+                <DayHeading date={date} isToday={date === today} t={t} locale={locale} />
               </th>
             ))}
           </tr>
@@ -92,14 +94,14 @@ export function StaffWeekGrid({
                     {items.length === 0 ? (
                       <Link
                         href={newHrefFor(member.id, date)}
-                        aria-label={`Book ${member.name} on ${date}`}
+                        aria-label={t("Book {name} on {date}", { name: member.name, date })}
                         className="flex min-h-11 items-center justify-center rounded-lg border border-dashed
                                    border-slate-300 text-sm text-slate-400 transition hover:border-slate-500
                                    hover:text-slate-700 focus-visible:outline focus-visible:outline-2
                                    focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                       >
                         <span aria-hidden="true">—</span>
-                        <span className="sr-only">No appointment visible. Book this day.</span>
+                        <span className="sr-only">{t("No appointment visible. Book this day.")}</span>
                       </Link>
                     ) : (
                       <div className="space-y-2">
@@ -133,9 +135,11 @@ export function StaffWeekGrid({
   );
 }
 
-function DayHeading({ date, isToday }: { date: string; isToday: boolean }) {
+function DayHeading({
+  date, isToday, t, locale,
+}: { date: string; isToday: boolean; t: TFunc; locale: string }) {
   const [, month, day] = date.split("-");
-  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" })
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" })
     .format(new Date(`${date}T00:00:00Z`));
   return (
     <span className="block">
@@ -145,7 +149,7 @@ function DayHeading({ date, isToday }: { date: string; isToday: boolean }) {
       {isToday ? (
         <span className="mt-0.5 inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[10px]
                          font-semibold uppercase tracking-wide text-white">
-          Today
+          {t("Today")}
         </span>
       ) : null}
     </span>

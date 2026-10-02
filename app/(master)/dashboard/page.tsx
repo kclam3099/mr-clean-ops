@@ -13,6 +13,7 @@ import { StaffDayStatusPanel } from "@/components/dashboard/StaffDayStatusPanel"
 import { getStaffDayStatus } from "@/lib/agenda/staff-status";
 import { compactMoney } from "@/lib/pricing/duration";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Dashboard — Mr Clean & Clean Ops" };
 
@@ -41,6 +42,7 @@ export default async function DashboardPage({
   if (!session) redirect("/login");
 
   const params = await searchParams;
+  const { t, locale } = await getI18n();
   const scope = resolveScope(session, params.ws ?? null);
   const hasChoice = scopeOptions(session).length >= 2;
 
@@ -106,11 +108,11 @@ export default async function DashboardPage({
 
   const heading = (
     <div>
-      <h1 className="text-lg font-semibold tracking-tight text-ink">Dashboard</h1>
+      <h1 className="text-lg font-semibold tracking-tight text-ink">{t("Dashboard")}</h1>
       {/* The subheading names the RESOLVED scope, and the selector in the nav
           reads the same URL parameter, so the two cannot disagree. */}
       <p className="text-sm text-ink-muted" data-scope-label>
-        {scope.label} · {isWeek ? "Week" : "Month"} overview
+        {t(scope.label)} · {isWeek ? t("Week overview") : t("Month overview")}
       </p>
     </div>
   );
@@ -163,7 +165,7 @@ export default async function DashboardPage({
           className="rounded-lg border border-line bg-card px-3 py-2 text-sm font-medium
                      text-ink transition hover:bg-sunken"
         >
-          Open calendar
+          {t("Open calendar")}
         </Link>
       </div>
 
@@ -172,14 +174,14 @@ export default async function DashboardPage({
           "next" ambiguous — next week or next month? */}
       <div
         role="tablist"
-        aria-label="Date range"
+        aria-label={t("Date range")}
         data-range-tabs
         className="inline-flex rounded-xl border border-line bg-card p-0.5"
       >
         {([
-          ["week", "This week", rangeHref("week")],
-          ["next-week", "Next week", rangeHref("next-week")],
-          ["month", "This month", rangeHref("month")],
+          ["week", t("This week"), rangeHref("week")],
+          ["next-week", t("Next week"), rangeHref("next-week")],
+          ["month", t("This month"), rangeHref("month")],
         ] as const).map(([key, label, href]) => {
           const active = key === "month" ? !isWeek : range === key;
           return (
@@ -211,14 +213,14 @@ export default async function DashboardPage({
             className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-medium
                        text-ink transition hover:bg-sunken"
           >
-            Today
+            {t("Today")}
           </Link>
           <Link
             href={isWeek
               ? rangeHref(range, addDays(weekStart(weekAnchor), -7))
               : monthHref(monthKey(addMonths(anchor, -1)))}
             data-month-prev
-            aria-label={isWeek ? "Previous week" : "Previous month"}
+            aria-label={isWeek ? t("Previous week") : t("Previous month")}
             className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
                        text-ink transition hover:bg-sunken"
           >
@@ -229,27 +231,27 @@ export default async function DashboardPage({
               ? rangeHref(range, addDays(weekStart(weekAnchor), 7))
               : monthHref(monthKey(addMonths(anchor, 1)))}
             data-month-next
-            aria-label={isWeek ? "Next week" : "Next month"}
+            aria-label={isWeek ? t("Next week") : t("Next month")}
             className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
                        text-ink transition hover:bg-sunken"
           >
             <span aria-hidden="true">→</span>
           </Link>
           <h2 className="ml-1.5 text-base font-semibold tracking-tight text-ink" data-month-label>
-            {isWeek ? weekLabel(weekAnchor) : monthLabel(anchor)}
+            {isWeek ? weekLabel(weekAnchor, locale) : monthLabel(anchor, locale)}
           </h2>
         </div>
 
         <p className="text-xs text-ink-muted" data-month-summary>
           <span className="tabular-nums">{inMonth.length}</span>
-          {inMonth.length === 1 ? " appointment" : " appointments"}
+          {inMonth.length === 1 ? t(" appointment") : t(" appointments")}
           {" · "}
           <span className="tabular-nums">{compactMoney(revenue)}</span>
           {largeJobs > 0 ? (
             <>
               {" · "}
               <span className="tabular-nums">{largeJobs}</span>
-              {largeJobs === 1 ? " large job" : " large jobs"}
+              {largeJobs === 1 ? t(" large job") : t(" large jobs")}
             </>
           ) : null}
         </p>

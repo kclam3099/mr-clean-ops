@@ -1,5 +1,6 @@
 import type { StaffDayStatus, StaffDayState } from "@/lib/agenda/staff-status";
 import { ACKNOWLEDGE_BY_HOUR } from "@/lib/agenda/staff-status";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * Who is up and has seen today's work.
@@ -39,8 +40,9 @@ const STATE: Record<
   },
 };
 
-export function StaffDayStatusPanel({ rows }: { rows: StaffDayStatus[] }) {
+export async function StaffDayStatusPanel({ rows }: { rows: StaffDayStatus[] }) {
   if (rows.length === 0) return null;
+  const { t } = await getI18n();
 
   const waiting = rows.filter((r) => r.state === "unseen").length;
 
@@ -52,12 +54,12 @@ export function StaffDayStatusPanel({ rows }: { rows: StaffDayStatus[] }) {
     >
       <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
         <h2 id="staff-status-heading" className="text-sm font-semibold text-ink">
-          This morning
+          {t("This morning")}
         </h2>
         <p className={`text-xs ${waiting ? "font-medium text-danger" : "text-ink-muted"}`}>
           {waiting === 0
-            ? "Everyone with work today has seen it."
-            : `${waiting} not ready`}
+            ? t("Everyone with work today has seen it.")
+            : t("{count} not ready", { count: waiting })}
         </p>
       </div>
 
@@ -78,14 +80,16 @@ export function StaffDayStatusPanel({ rows }: { rows: StaffDayStatus[] }) {
             >
               <span className={`block truncate text-sm font-bold ${s.name}`}>{r.name}</span>
               <span className={`mt-0.5 block text-[11px] font-semibold ${s.sub}`}>
-                {s.label}
+                {t(s.label)}
               </span>
               <span className="mt-0.5 block text-[10px] leading-tight text-ink-faint">
                 {r.state === "none"
                   ? "—"
                   : r.acknowledgedAt
-                    ? `${r.acknowledgedAt}${r.late ? " late" : ""}`
-                    : `${r.appointments} job${r.appointments === 1 ? "" : "s"}`}
+                    ? `${r.acknowledgedAt}${r.late ? t(" late") : ""}`
+                    : r.appointments === 1
+                      ? t("{count} job", { count: r.appointments })
+                      : t("{count} jobs", { count: r.appointments })}
               </span>
             </li>
           );
@@ -94,7 +98,7 @@ export function StaffDayStatusPanel({ rows }: { rows: StaffDayStatus[] }) {
 
       {rows.some((r) => r.late) ? (
         <p className="mt-2 text-[11px] text-warn">
-          “late” means seen after {String(ACKNOWLEDGE_BY_HOUR).padStart(2, "0")}:00.
+          {t("“late” means seen after {time}.", { time: `${String(ACKNOWLEDGE_BY_HOUR).padStart(2, "0")}:00` })}
         </p>
       ) : null}
     </section>

@@ -4,6 +4,7 @@ import { addDays } from "@/lib/agenda/queries";
 import { AppointmentCard } from "./AppointmentCard";
 import { formatDateHeading } from "./AgendaList";
 import type { CalendarStaff } from "./StaffWeekGrid";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * Mobile calendar — a day strip plus that day's agenda, grouped by staff.
@@ -15,7 +16,7 @@ import type { CalendarStaff } from "./StaffWeekGrid";
  * Same honesty rule as the desktop grid — a staff member with nothing listed is
  * shown as "Nothing scheduled", never as free or available.
  */
-export function CalendarDayView({
+export async function CalendarDayView({
   appointments,
   staff,
   range,
@@ -38,6 +39,7 @@ export function CalendarDayView({
   showWorkspace?: boolean;
   highlightId?: string;
 }) {
+  const { t, locale } = await getI18n();
   const days: string[] = [];
   for (let d = range.from; d <= range.to; d = addDays(d, 1)) days.push(d);
 
@@ -46,7 +48,7 @@ export function CalendarDayView({
 
   return (
     <div className="space-y-4">
-      <nav aria-label="Day of week" className="-mx-1 overflow-x-auto">
+      <nav aria-label={t("Day of week")} className="-mx-1 overflow-x-auto">
         <ul className="flex gap-1 px-1">
           {days.map((date) => {
             const selected = date === selectedDay;
@@ -63,7 +65,7 @@ export function CalendarDayView({
                   } ${date === today && !selected ? "ring-1 ring-slate-900" : ""}`}
                 >
                   <span className="text-[10px] font-semibold uppercase tracking-wide opacity-70">
-                    {new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" })
+                    {new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" })
                       .format(new Date(`${date}T00:00:00Z`))}
                   </span>
                   <span className="text-base font-medium tabular-nums">{Number(date.split("-")[2])}</span>
@@ -74,7 +76,7 @@ export function CalendarDayView({
                     }`}
                   />
                   <span className="sr-only">
-                    {hasAny.has(date) ? "has appointments" : "no appointments visible"}
+                    {hasAny.has(date) ? t("has appointments") : t("no appointments visible")}
                   </span>
                 </Link>
               </li>
@@ -84,10 +86,10 @@ export function CalendarDayView({
       </nav>
 
       <h2 className="text-sm font-semibold text-slate-900">
-        {formatDateHeading(selectedDay)}
+        {formatDateHeading(selectedDay, locale)}
         {selectedDay === today ? (
           <span className="ml-2 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
-            Today
+            {t("Today")}
           </span>
         ) : null}
       </h2>
@@ -102,14 +104,14 @@ export function CalendarDayView({
               </h3>
               {items.length === 0 ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-slate-500">Nothing scheduled.</p>
+                  <p className="text-sm text-slate-500">{t("Nothing scheduled.")}</p>
                   <Link
                     href={newHrefFor(member.id, selectedDay)}
                     className="flex min-h-11 items-center justify-center rounded-xl border border-dashed
                                border-slate-300 px-4 text-sm font-medium text-slate-600 transition
                                hover:border-slate-500 hover:text-slate-900"
                   >
-                    + Book {member.name}
+                    {t("+ Book {name}", { name: member.name })}
                   </Link>
                 </div>
               ) : (

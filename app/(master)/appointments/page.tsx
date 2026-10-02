@@ -4,6 +4,7 @@ import { resolveScope } from "@/lib/workspace/scope";
 import { getMasterAgenda, businessToday, addDays } from "@/lib/agenda/queries";
 import { AgendaList } from "@/components/agenda/AgendaList";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Appointments — Mr Clean & Clean Ops" };
 
@@ -15,6 +16,7 @@ export default async function AppointmentsPage({
 }) {
   const session = await getSessionContext();
   if (!session) redirect("/login");
+  const { t } = await getI18n();
 
   const params = await searchParams;
   const scope = resolveScope(session, params.ws ?? null);
@@ -24,15 +26,17 @@ export default async function AppointmentsPage({
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">Appointments</h1>
-        <p className="text-sm text-slate-500">{scope.label} · next 30 days</p>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("Appointments")}</h1>
+        <p className="text-sm text-slate-500">
+          {t("{scope} · next 30 days", { scope: scope.kind === "all" ? t(scope.label) : scope.label })}
+        </p>
       </div>
 
       {result.ok ? (
         <AgendaList
           appointments={result.appointments}
           detailHrefFor={(id) => `/appointments/${id}`}
-          emptyMessage="No appointments in the next 30 days."
+          emptyMessage={t("No appointments in the next 30 days.")}
           showStaff
           showWorkspace={scope.kind === "all"}
         />

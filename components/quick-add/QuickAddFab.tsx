@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { QuickAddSheet } from "./QuickAddSheet";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * The persistent + button, mounted once per authenticated shell so it is on
@@ -21,6 +22,7 @@ export function QuickAddFab({
   businessNow: string;
 }) {
   const pathname = usePathname();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [initialDate, setInitialDate] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function QuickAddFab({
         <button
           type="button"
           onClick={() => { setInitialDate(""); setOpen(true); }}
-          aria-label="New appointment"
+          aria-label={t("New appointment")}
           className="fixed bottom-6 right-6 z-40 flex h-14 items-center gap-2 rounded-full bg-slate-900
                      px-5 text-white shadow-lg transition hover:bg-slate-800
                      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
@@ -70,7 +72,7 @@ export function QuickAddFab({
           <span aria-hidden="true" className="text-2xl leading-none">+</span>
           {/* Label is inline on desktop, not hover-only: a hover-revealed label
               is unreachable by touch and by keyboard. */}
-          <span className="text-sm font-medium max-sm:sr-only">New appointment</span>
+          <span className="text-sm font-medium max-sm:sr-only">{t("New appointment")}</span>
         </button>
       )}
 

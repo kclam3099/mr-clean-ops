@@ -7,6 +7,7 @@ import { getCalendarStaff } from "@/lib/agenda/staff";
 import { StaffWeekGrid } from "@/components/agenda/StaffWeekGrid";
 import { CalendarDayView } from "@/components/agenda/CalendarDayView";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Calendar — Mr Clean & Clean Ops" };
 
@@ -26,6 +27,7 @@ export default async function CalendarPage({
   if (!session) redirect("/login");
 
   const params = await searchParams;
+  const { t, locale } = await getI18n();
   const scope = resolveScope(session, params.ws ?? null);
   const hasChoice = scopeOptions(session).length >= 2;
   const today = businessToday();
@@ -73,9 +75,9 @@ export default async function CalendarPage({
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">Calendar</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("Calendar")}</h1>
           <p className="text-sm text-slate-500">
-            {formatRange(range.from, range.to)} · {scope.label}
+            {formatRange(range.from, range.to, locale)} · {t(scope.label)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -84,11 +86,11 @@ export default async function CalendarPage({
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium
                        text-slate-700 transition hover:bg-slate-50"
           >
-            Find a time
+            {t("Find a time")}
           </Link>
-          <WeekLink query={keep({ week: addDays(range.from, -7) })} label="← Previous" />
-          <WeekLink query={keep({ week: today })} label="This week" />
-          <WeekLink query={keep({ week: addDays(range.from, 7) })} label="Next →" />
+          <WeekLink query={keep({ week: addDays(range.from, -7) })} label={t("← Previous")} />
+          <WeekLink query={keep({ week: today })} label={t("This week")} />
+          <WeekLink query={keep({ week: addDays(range.from, 7) })} label={t("Next →")} />
         </div>
       </div>
 
@@ -96,7 +98,7 @@ export default async function CalendarPage({
         <ErrorNotice error={result.error} />
       ) : staff.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
-          No active team members in this view.
+          {t("No active team members in this view.")}
         </p>
       ) : (
         <>
@@ -130,16 +132,16 @@ export default async function CalendarPage({
           {/* States what an empty cell does and does not mean. A staff member
               may hold an appointment in a workspace you cannot see. */}
           <p className="text-xs text-slate-500">
-            A blank day means no appointment is visible to you here. Use{" "}
+            {t("A blank day means no appointment is visible to you here. Use")}{" "}
             {/* -my-2 keeps the sentence on one line while the padding gives
                 this inline link a thumb-sized hit area. */}
             <Link
               href={scopedHref("/availability", scope, hasChoice)}
               className="-my-2 inline-block py-2 underline"
             >
-              Find a time
+              {t("Find a time")}
             </Link>{" "}
-            to check what can actually be booked.
+            {t("to check what can actually be booked.")}
           </p>
         </>
       )}
@@ -159,9 +161,9 @@ function WeekLink({ query, label }: { query: string; label: string }) {
   );
 }
 
-function formatRange(from: string, to: string): string {
+function formatRange(from: string, to: string, locale: string): string {
   const fmt = (iso: string, withYear: boolean) =>
-    new Intl.DateTimeFormat("en-GB", {
+    new Intl.DateTimeFormat(locale, {
       day: "numeric", month: "short", timeZone: "UTC",
       ...(withYear ? { year: "numeric" } : {}),
     }).format(new Date(`${iso}T00:00:00Z`));

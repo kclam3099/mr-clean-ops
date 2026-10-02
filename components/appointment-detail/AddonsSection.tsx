@@ -7,6 +7,8 @@ import { addAddonAction, removeAddonAction } from "@/lib/appointments/addon-acti
 import type { ActionResult } from "@/lib/appointments/lifecycle-actions";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { formatMoney } from "@/lib/pricing/duration";
+import { useT } from "@/components/i18n/I18nProvider";
+import type { TFunc } from "@/lib/i18n/core";
 
 /**
  * Add-ons: extra work sold on site, credited to the assigned staff member.
@@ -27,6 +29,7 @@ export function AddonsSection({
   canAdd: boolean;
 }) {
   const router = useRouter();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ActionResult | null>(null);
   const [pending, startTransition] = useTransition();
@@ -35,7 +38,11 @@ export function AddonsSection({
   if (!detail.addonsAvailable || (detail.addons.length === 0 && !canAdd)) return null;
 
   const total = detail.addons.reduce((sum, a) => sum + a.amount, 0);
-  const fieldError = (n: string) => (result?.status === "error" ? result.fields?.[n] : undefined);
+  /** Server messages stay English in the action; they are translated only for display. */
+  const fieldError = (n: string) => {
+    const msg = result?.status === "error" ? result.fields?.[n] : undefined;
+    return msg === undefined ? undefined : translateFieldError(t, msg);
+  };
 
   function submit(action: (fd: FormData) => Promise<ActionResult>, fd: FormData, closeOnSuccess: boolean) {
     if (pending) return;
@@ -54,9 +61,11 @@ export function AddonsSection({
       <div className="flex items-center justify-between gap-2 bg-brand px-4 py-2 text-white">
         <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <span aria-hidden className="h-4 w-1 rounded-full bg-gold" />
-          Add-ons
+          {t("Add-ons")}
           {detail.staffName ? (
-            <span className="hidden truncate font-normal text-white/70 sm:inline">· credited to {detail.staffName}</span>
+            <span className="hidden truncate font-normal text-white/70 sm:inline">
+              {t("· credited to {name}", { name: detail.staffName })}
+            </span>
           ) : null}
         </h2>
         {canAdd && !open ? (
@@ -67,7 +76,7 @@ export function AddonsSection({
             className="flex min-h-8 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-lg bg-gold px-3
                        text-xs font-bold text-brand-900 transition hover:brightness-95"
           >
-            + Add-on
+            {t("+ Add-on")}
           </button>
         ) : null}
       </div>
@@ -88,9 +97,11 @@ export function AddonsSection({
                   <button
                     type="button"
                     disabled={pending}
-                    aria-label={`Remove add-on ${a.description}`}
+                    aria-label={t("Remove add-on {description}", { description: a.description })}
                     onClick={() => {
-                      if (!window.confirm(`Remove "${a.description}" (${formatMoney(a.amount)})?`)) return;
+                      if (!window.confirm(t("Remove \"{description}\" ({amount})?", {
+                        description: a.description, amount: formatMoney(a.amount),
+                      }))) return;
                       const fd = new FormData();
                       fd.set("appointmentId", detail.id);
                       fd.set("addonId", a.id);
@@ -108,7 +119,7 @@ export function AddonsSection({
         </ul>
       ) : !open ? (
         <p className="px-4 py-3 text-sm text-ink-faint">
-          No add-ons yet. Sold something extra on site? Record it here.
+          {t("No add-ons yet. Sold something extra on site? Record it here.")}
         </p>
       ) : null}
 
@@ -125,13 +136,13 @@ export function AddonsSection({
         >
           <div className="grid gap-3 sm:grid-cols-[1fr_9rem]">
             <div className="space-y-1">
-              <label htmlFor="addon-description" className="block text-sm font-medium text-ink">Item</label>
+              <label htmlFor="addon-description" className="block text-sm font-medium text-ink">{t("Item")}</label>
               <input id="addon-description" name="description" required maxLength={120} autoFocus
-                placeholder="e.g. Mattress cleaning" disabled={pending} className={inputClass} />
+                placeholder={t("e.g. Mattress cleaning")} disabled={pending} className={inputClass} />
               {fieldError("description") ? <p className="text-sm text-red-600">{fieldError("description")}</p> : null}
             </div>
             <div className="space-y-1">
-              <label htmlFor="addon-amount" className="block text-sm font-medium text-ink">Amount (RM)</label>
+              <label htmlFor="addon-amount" className="block text-sm font-medium text-ink">{t("Amount (RM)")}</label>
               <input id="addon-amount" name="amount" required type="number" inputMode="decimal"
                 min="0.01" max="100000" step="0.01" placeholder="0.00" disabled={pending} className={inputClass} />
               {fieldError("amount") ? <p className="text-sm text-red-600">{fieldError("amount")}</p> : null}
@@ -140,11 +151,11 @@ export function AddonsSection({
           <div className="flex gap-2">
             <button type="button" onClick={() => { setOpen(false); setResult(null); }} disabled={pending}
               className="rounded-lg border border-line bg-card px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-sunken">
-              Cancel
+              {t("Cancel")}
             </button>
             <button type="submit" disabled={pending}
               className="flex-1 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-50">
-              {pending ? "Saving…" : "Save add-on"}
+              {pending ? t("Saving…") : t("Save add-on")}
             </button>
           </div>
         </form>
@@ -152,12 +163,18 @@ export function AddonsSection({
 
       {detail.addons.length > 0 ? (
         <div className="flex justify-between border-t-2 border-gold bg-sunken px-4 py-3 text-sm font-bold">
-          <span className="text-ink">Add-on total</span>
+          <span className="text-ink">{t("Add-on total")}</span>
           <span data-addon-total className="tabular-nums text-brand">{formatMoney(total)}</span>
         </div>
       ) : null}
     </section>
   );
+}
+
+/** Field errors arrive in English from the server action; translated for display only. */
+function translateFieldError(t: TFunc, msg: string): string {
+  const max = /^Keep this under (\d+) characters$/.exec(msg);
+  return max ? t("Keep this under {max} characters", { max: max[1] as string }) : t(msg);
 }
 
 const inputClass =

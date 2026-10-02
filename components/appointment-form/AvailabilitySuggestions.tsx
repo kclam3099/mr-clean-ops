@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n/I18nProvider";
+
 /**
  * Standard-job availability suggestions.
  *
@@ -24,14 +26,15 @@ export function AvailabilitySuggestions({
   onPick: (time: string) => void;
   disabled: boolean;
 }) {
+  const { t } = useT();
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         {loading ? (
-          <p className="text-sm text-slate-500">Checking availability…</p>
+          <p className="text-sm text-slate-500">{t("Checking availability…")}</p>
         ) : slots.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No suggested times available. You can still enter a time below.
+            {t("No suggested times available. You can still enter a time below.")}
           </p>
         ) : (
           slots.map((time) => {
@@ -56,7 +59,7 @@ export function AvailabilitySuggestions({
         )}
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Available when checked — final availability is confirmed when saving.
+        {t("Available when checked — final availability is confirmed when saving.")}
       </p>
     </div>
   );

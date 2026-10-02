@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/components/i18n/I18nProvider";
 
 /**
  * Master workspace scope selector.
@@ -28,6 +29,7 @@ export function WorkspaceScopeSelector({
 }: {
   options: Array<{ value: string; label: string }>;
 }) {
+  const { t } = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -45,7 +47,7 @@ export function WorkspaceScopeSelector({
 
   return (
     <label className="flex items-center gap-2">
-      <span className="sr-only">Workspace</span>
+      <span className="sr-only">{t("Workspace")}</span>
       <select
         data-scope-selector
         value={value}

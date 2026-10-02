@@ -2,10 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import type { SessionContext } from "@/lib/auth/session";
-import { scopeOptions, type WorkspaceScope } from "@/lib/workspace/scope";
+import { ALL_OPERATIONS, scopeOptions, type WorkspaceScope } from "@/lib/workspace/scope";
+import { getI18n } from "@/lib/i18n/server";
 import { WorkspaceScopeSelector } from "./WorkspaceScopeSelector";
 import { AccountMenu } from "./AccountMenu";
 import { ScopedNavLinks } from "./ScopedNavLinks";
+import { LanguageToggle } from "@/components/i18n/LanguageToggle";
 
 /**
  * Master navigation. Every item is derived from what the caller can actually
@@ -20,26 +22,31 @@ import { ScopedNavLinks } from "./ScopedNavLinks";
  * produced a header four lines deep that pushed the actual page off the first
  * screen. The identity row stays put; the links scroll sideways under it.
  */
-export function MasterNav({
+export async function MasterNav({
   session,
   scope,
 }: {
   session: SessionContext;
   scope: WorkspaceScope;
 }) {
-  const options = scopeOptions(session);
+  const { t } = await getI18n();
+  // Only the virtual "All Operations" entry is ours to translate — every other
+  // option is a workspace name someone typed.
+  const options = scopeOptions(session).map((o) =>
+    o.value === ALL_OPERATIONS ? { ...o, label: t(o.label) } : o,
+  );
   const hasChoice = options.length >= 2;
 
   const links = [
-    { path: "/dashboard", label: "Today", scoped: true },
-    { path: "/calendar", label: "Calendar", scoped: true },
-    { path: "/appointments", label: "Appointments", scoped: true },
-    { path: "/staff", label: "Staff", scoped: true },
+    { path: "/dashboard", label: t("Today"), scoped: true },
+    { path: "/calendar", label: t("Calendar"), scoped: true },
+    { path: "/appointments", label: t("Appointments"), scoped: true },
+    { path: "/staff", label: t("Staff"), scoped: true },
     // /availability resolves its own operational workspace server-side and
     // reads no ws parameter, so scoping its link would be misleading.
-    { path: "/availability", label: "Availability", scoped: false },
-    { path: "/reports/monthly", label: "Reports", scoped: true },
-    ...(session.isSuperMaster ? [{ path: "/settings", label: "Settings", scoped: false }] : []),
+    { path: "/availability", label: t("Availability"), scoped: false },
+    { path: "/reports/monthly", label: t("Reports"), scoped: true },
+    ...(session.isSuperMaster ? [{ path: "/settings", label: t("Settings"), scoped: false }] : []),
   ];
 
   return (
@@ -73,11 +80,12 @@ export function MasterNav({
           ) : (
             // One workspace: name it plainly, as a label rather than a control.
             <span className="truncate rounded-lg bg-white/15 px-2.5 py-1.5 text-sm font-medium text-white">
-              {scope.label}
+              {scope.kind === "all" ? t(scope.label) : scope.label}
             </span>
           )}
 
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <LanguageToggle />
             <AccountMenu name={session.fullName} />
           </div>
         </div>

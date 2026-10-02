@@ -2,6 +2,8 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSessionContext, homePathFor } from "@/lib/auth/session";
 import { LoginForm } from "./LoginForm";
+import { LanguageToggle } from "@/components/i18n/LanguageToggle";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "Sign in — Mr Clean & Clean Ops" };
 
@@ -11,6 +13,7 @@ export default async function LoginPage() {
   // already signed it out, so the form is the correct destination.
   const session = await getSessionContext();
   if (session) redirect(homePathFor(session.role));
+  const { t } = await getI18n();
 
   return (
     <main className="flex min-h-screen flex-col bg-surface">
@@ -19,7 +22,10 @@ export default async function LoginPage() {
           put the white heading on the grey below it at 375px — invisible text,
           on the first screen anyone sees. Letting the block size to its own
           contents means it cannot come apart at a width nobody measured. */}
-      <header className="flex flex-col items-center bg-brand px-4 pt-10 pb-16 text-center">
+      <header className="relative flex flex-col items-center bg-brand px-4 pt-10 pb-16 text-center">
+        <div className="absolute right-3 top-3">
+          <LanguageToggle />
+        </div>
         <div className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white p-2.5 shadow-lg shadow-brand-900/30">
           <Image
             src="/brand/logo.png"
@@ -33,7 +39,7 @@ export default async function LoginPage() {
         <h1 className="mt-5 text-xl font-semibold tracking-tight text-white">
           Mr Clean &amp; Clean
         </h1>
-        <p className="mt-1 text-sm text-white/75">Operations</p>
+        <p className="mt-1 text-sm text-white/75">{t("Operations")}</p>
       </header>
 
       <div className="flex flex-1 flex-col items-center px-4 pb-10">
@@ -47,7 +53,7 @@ export default async function LoginPage() {
             under the 4.5 floor, and small text is exactly where the margin
             should not be spent. */}
         <p className="mt-6 max-w-sm text-center text-xs text-ink-muted">
-          Internal system. Accounts are created by a manager.
+          {t("Internal system. Accounts are created by a manager.")}
         </p>
       </div>
     </main>

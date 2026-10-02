@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { MonthlyReport, StaffMonthRow } from "@/lib/reports/monthly";
 import { colourAt, staffBadgeLetter } from "@/lib/agenda/staff-colour";
 import { compactMoney } from "@/lib/pricing/duration";
+import { getI18n } from "@/lib/i18n/server";
 
 type Totals = Extract<MonthlyReport, { ok: true }>["totals"];
 
@@ -10,16 +11,17 @@ type Totals = Extract<MonthlyReport, { ok: true }>["totals"];
  * add-on count and amount. Each row opens to the add-on items behind it, each
  * linking to its appointment. Native <details>, so it needs no client script.
  */
-export function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; totals: Totals }) {
+export async function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; totals: Totals }) {
+  const { t, locale } = await getI18n();
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-card" data-report-staff>
       <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 bg-brand px-4 py-2 text-[11px] font-bold
                       uppercase tracking-wider text-white/85 sm:grid-cols-[1fr_4rem_7rem_5rem_8rem]">
-        <span>Staff</span>
-        <span className="hidden text-right sm:block">Jobs</span>
-        <span className="hidden text-right sm:block">Booked</span>
-        <span className="text-right">Add-ons</span>
-        <span className="text-right">Add-on RM</span>
+        <span>{t("Staff")}</span>
+        <span className="hidden text-right sm:block">{t("Jobs")}</span>
+        <span className="hidden text-right sm:block">{t("Booked")}</span>
+        <span className="text-right">{t("Add-ons")}</span>
+        <span className="text-right">{t("Add-on RM")}</span>
       </div>
       <ul className="divide-y divide-line">
         {rows.map((r) => (
@@ -39,7 +41,9 @@ export function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; tota
                     <span className={`block truncate font-semibold ${colourAt(r.colourIndex).text}`}>{r.staffName}</span>
                     {/* Below sm the jobs/booked columns fold into a subline. */}
                     <span className="block text-xs text-ink-muted sm:hidden">
-                      {r.jobs} job{r.jobs === 1 ? "" : "s"} · {compactMoney(r.booked)} booked
+                      {r.jobs === 1
+                        ? t("{count} job · {amount} booked", { count: r.jobs, amount: compactMoney(r.booked) })
+                        : t("{count} jobs · {amount} booked", { count: r.jobs, amount: compactMoney(r.booked) })}
                     </span>
                   </span>
                   {r.addonCount > 0 ? (
@@ -60,7 +64,7 @@ export function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; tota
                       <Link href={`/appointments/${a.appointmentId}`}
                         className="flex items-baseline justify-between gap-3 px-4 py-2 pl-12 text-xs hover:bg-brand/5">
                         <span className="min-w-0">
-                          <span className="tabular-nums text-ink-muted">{shortDate(a.date)}</span>
+                          <span className="tabular-nums text-ink-muted">{shortDate(a.date, locale)}</span>
                           <span className="mx-1.5 text-ink-faint">·</span>
                           <span className="font-medium text-ink">{a.description}</span>
                           <span className="block truncate text-ink-faint sm:inline sm:before:mx-1.5 sm:before:content-['·']">
@@ -79,7 +83,7 @@ export function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; tota
       </ul>
       <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 border-t-2 border-gold bg-sunken px-4 py-3 text-sm
                       font-bold sm:grid-cols-[1fr_4rem_7rem_5rem_8rem]">
-        <span className="text-ink">Total</span>
+        <span className="text-ink">{t("Total")}</span>
         <span className="hidden text-right tabular-nums text-ink sm:block">{totals.jobs}</span>
         <span className="hidden text-right tabular-nums text-ink sm:block">{compactMoney(totals.booked)}</span>
         <span className="text-right tabular-nums text-ink">{totals.addonCount}</span>
@@ -89,8 +93,8 @@ export function StaffReportTable({ rows, totals }: { rows: StaffMonthRow[]; tota
   );
 }
 
-function shortDate(iso: string): string {
+function shortDate(iso: string, locale: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" })
     .format(new Date(Date.UTC(y as number, (m as number) - 1, d as number)));
 }

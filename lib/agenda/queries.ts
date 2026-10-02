@@ -281,10 +281,10 @@ export function monthKey(isoDate: string): string {
   return isoDate.slice(0, 7);
 }
 
-/** "2026-09-11" -> "September 2026". */
-export function monthLabel(isoDate: string): string {
+/** "2026-09-11" -> "September 2026" (or "2026年9月" for a zh locale). */
+export function monthLabel(isoDate: string, locale = "en-GB"): string {
   const [y, m] = isoDate.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" })
     .format(new Date(Date.UTC(y as number, (m as number) - 1, 1)));
 }
 
@@ -352,10 +352,14 @@ export function dashWeekRange(isoDate: string): DateRange {
   return { from, to: addDays(from, 6) };
 }
 
-/** "28 Sep – 4 Oct 2026", for a week heading. */
-export function weekLabel(isoDate: string): string {
+/** "28 Sep – 4 Oct 2026" (or "2026年9月28日 – 10月4日"), for a week heading. */
+export function weekLabel(isoDate: string, locale = "en-GB"): string {
   const from = weekStart(isoDate);
   const to = addDays(from, 6);
+  if (locale.startsWith("zh")) {
+    const zh = (iso: string) => `${Number(iso.slice(5, 7))}月${Number(iso.slice(8, 10))}日`;
+    return `${from.slice(0, 4)}年${zh(from)} – ${zh(to)}`;
+  }
   const fmt = (iso: string, withYear: boolean) => {
     const [y, m, d] = iso.split("-").map(Number);
     const month = new Date(Date.UTC(y as number, (m as number) - 1, 1))

@@ -6,6 +6,7 @@ import { getBookingConfig } from "@/lib/booking-config/queries";
 import { businessToday } from "@/lib/agenda/queries";
 import { businessNowLocal } from "@/lib/appointments/message-parser";
 import { AppointmentForm } from "@/components/appointment-form/AppointmentForm";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata = { title: "New appointment — Mr Clean & Clean Ops" };
 
@@ -27,6 +28,7 @@ export default async function NewStaffAppointmentPage({
 }) {
   const session = await getSessionContext();
   if (!session) redirect("/login");
+  const { t } = await getI18n();
 
   const params = await searchParams;
   const [context, config] = await Promise.all([
@@ -43,19 +45,18 @@ export default async function NewStaffAppointmentPage({
   return (
     <div className="space-y-4 pb-24">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-900">New appointment</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("New appointment")}</h1>
         <Link
           href="/my/today"
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
         >
-          Cancel
+          {t("Cancel")}
         </Link>
       </div>
 
       {context.workspaces.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
-          You are not an active member of any workspace, so you cannot create appointments.
-          Please contact your manager.
+          {t("You are not an active member of any workspace, so you cannot create appointments. Please contact your manager.")}
         </p>
       ) : (
         <AppointmentForm

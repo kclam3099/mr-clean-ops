@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { getLang } from "@/lib/i18n/server";
+import { I18nProvider } from "@/components/i18n/I18nProvider";
 
 // Inter, for the reason it is usually chosen: it was drawn for small sizes on
 // screen, and most of what this app shows is a time, a name and an amount read
@@ -31,13 +33,18 @@ export const viewport: Viewport = {
 // §B) is set via vercel.json's "regions" field, not a route export — the
 // Next.js `preferredRegion` export is deprecated as of Next.js 16.
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Read once here and handed down, so every Client Component renders in the
+  // same language the server just used.
+  const lang = await getLang();
   return (
     <html
-      lang="en"
+      lang={lang === "zh" ? "zh-Hans" : "en"}
       className={`${inter.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <I18nProvider lang={lang}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }
