@@ -217,15 +217,25 @@ try {
   // =========================================================================
   {
     const { page, ctx } = await session(ids.email.kc);
+    // A bare /dashboard — what logging in lands on — opens THIS WEEK.
     await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await settle(page);
+    const landing = await page.evaluate(() => ({
+      active: document.querySelector('[data-range][data-active="true"]')?.getAttribute("data-range") ?? "",
+      cells: [...document.querySelectorAll("[data-day-cell]")]
+        .filter((el) => el.getBoundingClientRect().width > 0).length,
+    }));
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     const m = await read(page);
 
     rec.check({
-      id: "DB-01 defaults to the current month", actor: "KC", setup: "no ?month",
-      action: "read the month heading",
-      expected: monthLabelOf(today),
-      actual: m.monthLabel || "(none)", ok: m.monthLabel === monthLabelOf(today),
+      id: "DB-01 lands on this week; the month tab opens the current month", actor: "KC",
+      setup: "bare /dashboard, then ?range=month",
+      action: "read the active range tab and cell count, then the month heading",
+      expected: `week tab, 7 cells; then ${monthLabelOf(today)}`,
+      actual: `${landing.active || "(none)"} tab, ${landing.cells} cells; then ${m.monthLabel || "(none)"}`,
+      ok: landing.active === "week" && landing.cells === 7 && m.monthLabel === monthLabelOf(today),
     });
 
     rec.check({
@@ -287,7 +297,7 @@ try {
       actual: `${onPrev.todayMarkers}`, ok: onPrev.todayMarkers === 0,
     });
 
-    await page.goto(`${BASE}/dashboard?month=${next}`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month&month=${next}`, { waitUntil: "load" });
     await settle(page);
     const onNext = await read(page);
     rec.check({
@@ -317,7 +327,7 @@ try {
   // =========================================================================
   {
     const { page, ctx } = await session(ids.email.kc);
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     const m = await read(page);
 
@@ -442,9 +452,9 @@ try {
     const { page, ctx } = await session(ids.email.kc);
 
     for (const [label, query, expectLabel, expectPrivate, expectShared] of [
-      ["All Operations", "", "All Operations", true, true],
-      ["Shared Team", `?ws=${ids.ws.shared}`, "Shared Team", false, true],
-      ["KC Private Team", `?ws=${ids.ws.private}`, "KC Private Team", true, false],
+      ["All Operations", "?range=month", "All Operations", true, true],
+      ["Shared Team", `?range=month&ws=${ids.ws.shared}`, "Shared Team", false, true],
+      ["KC Private Team", `?range=month&ws=${ids.ws.private}`, "KC Private Team", true, false],
     ]) {
       await page.goto(`${BASE}/dashboard${query}`, { waitUntil: "load" });
       await settle(page);
@@ -470,7 +480,7 @@ try {
     }
 
     // Month navigation must not silently widen the scope.
-    await page.goto(`${BASE}/dashboard?ws=${ids.ws.shared}`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month&ws=${ids.ws.shared}`, { waitUntil: "load" });
     await settle(page);
     await page.click("[data-month-next]");
     await page.waitForTimeout(2000);
@@ -488,7 +498,7 @@ try {
     });
 
     // Switching scope through the SELECTOR must move everything together.
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     await page.selectOption("[data-scope-selector]", { label: "Shared Team" });
     await page.waitForTimeout(2500);
@@ -530,7 +540,7 @@ try {
   let kcSummary = "";
   {
     const { page, ctx } = await session(ids.email.kc);
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     const m = await read(page);
     kcSummary = m.summary;
@@ -560,7 +570,7 @@ try {
   // =========================================================================
   {
     const { page, ctx } = await session(ids.email.nick);
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     const m = await read(page);
 
@@ -629,7 +639,7 @@ try {
       security: true,
     });
 
-    await page.goto(`${BASE}/dashboard?ws=${ids.ws.private}`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month&ws=${ids.ws.private}`, { waitUntil: "load" });
     await settle(page);
     const forged = await read(page);
     rec.check({
@@ -656,7 +666,7 @@ try {
     [1440, "month-grid"],
   ]) {
     const { page, ctx } = await session(ids.email.kc, { width, height: 900 });
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
     const m = await read(page);
 
@@ -724,7 +734,7 @@ try {
   // =========================================================================
   {
     const { page, ctx } = await session(ids.email.kc);
-    await page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(page);
 
     // A date cell's + hands the date to the ONE Quick Add sheet in the shell,
@@ -777,7 +787,7 @@ try {
     });
 
     const kcSession = await session(ids.email.kc);
-    await kcSession.page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await kcSession.page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await settle(kcSession.page);
     const kcPanel = await readPanel(kcSession.page);
 
@@ -810,7 +820,7 @@ try {
     // not — a breakpoint that duplicated it could duplicate a leak with it.
     for (const width of [390, 1440]) {
       const nick = await session(ids.email.nick, { width, height: 900 });
-      await nick.page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+      await nick.page.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
       await settle(nick.page);
       const panel = await readPanel(nick.page);
 

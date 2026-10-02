@@ -269,7 +269,7 @@ try {
     await kcPage.fill("input[name=password]", PASSWORD);
     await kcPage.click("button[type=submit]");
     await kcPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
-    await kcPage.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await kcPage.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await kcPage.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 });
     const kcStats = await readStats(kcPage);
     await kcCtx.close();
@@ -281,7 +281,7 @@ try {
     await nickPage.fill("input[name=password]", PASSWORD);
     await nickPage.click("button[type=submit]");
     await nickPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
-    await nickPage.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await nickPage.goto(`${BASE}/dashboard?range=month`, { waitUntil: "load" });
     await nickPage.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), { timeout: 20_000 });
     const nickStats = await readStats(nickPage);
     const nickPage_ = await nickPage.evaluate(() => ({

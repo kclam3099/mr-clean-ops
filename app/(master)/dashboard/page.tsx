@@ -16,7 +16,7 @@ import { ErrorNotice } from "@/components/ui/ErrorNotice";
 export const metadata = { title: "Dashboard — Mr Clean & Clean Ops" };
 
 /**
- * Master home: the month, at a glance.
+ * Master home: this week by default, the month one tab away.
  *
  * Logging in should answer "how full are we" in one look — which days are busy,
  * where the work clusters, which days are still open, where the big jobs are.
@@ -46,10 +46,14 @@ export default async function DashboardPage({
   const today = businessToday();
 
   // Three ranges, because "how full are we" is a different question on a Monday
-  // morning than at month end. An unrecognised value falls back to the month
-  // rather than erroring, like every other hand-editable parameter here.
+  // morning than at month end. Logging in lands on THIS WEEK: the first thing a
+  // Master acts on is the next few days, not the shape of the month. A bare
+  // ?month= link (older bookmarks, the month arrows) still means the month; any
+  // other unrecognised value falls back to the week rather than erroring.
   const range: "week" | "next-week" | "month" =
-    params.range === "week" || params.range === "next-week" ? params.range : "month";
+    params.range === "week" || params.range === "next-week" || params.range === "month"
+      ? params.range
+      : params.month ? "month" : "week";
 
   // A hand-edited or stale month falls back to this one rather than erroring.
   const anchor = /^\d{4}-\d{2}$/.test(params.month ?? "") ? `${params.month}-01` : today;
@@ -79,16 +83,16 @@ export default async function DashboardPage({
   const rangeHref = (r: "week" | "next-week" | "month", weekIso?: string) => {
     const q = new URLSearchParams();
     if (hasChoice) q.set("ws", scopeValue);
-    if (r !== "month") {
-      q.set("range", r);
-      if (weekIso) q.set("week", weekIso);
-    }
+    // The month is no longer the default, so it has to be named explicitly.
+    q.set("range", r);
+    if (r !== "month" && weekIso) q.set("week", weekIso);
     return `/dashboard?${q.toString()}`;
   };
 
   const monthHref = (m: string) => {
     const q = new URLSearchParams();
     if (hasChoice) q.set("ws", scopeValue);
+    q.set("range", "month");
     q.set("month", m);
     return `/dashboard?${q.toString()}`;
   };

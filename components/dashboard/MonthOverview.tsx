@@ -49,6 +49,13 @@ function dayNumber(iso: string): string {
   return String(Number(iso.slice(8, 10)));
 }
 
+/** "1,250" or "1.3k": a day total small enough for a phone-width date cell. */
+function shortAmount(amount: number): string {
+  if (amount >= 10000) return `${(amount / 1000).toFixed(0)}k`;
+  if (amount >= 1000) return `${(amount / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(Math.round(amount));
+}
+
 function longDay(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return new Intl.DateTimeFormat("en-GB", {
@@ -117,7 +124,13 @@ export function MonthOverview({
     window.dispatchEvent(new CustomEvent("quickadd:open", { detail: { date } }));
   };
 
+  // What the day is worth, from the same rows the cell draws — never a separate
+  // aggregate, so it cannot include work this Master is not allowed to see.
+  const dayTotal = (date: string): number =>
+    (byDate.get(date) ?? []).reduce((sum, e) => sum + (e.totalAmount ?? 0), 0);
+
   const selectedEntries = byDate.get(selectedDay) ?? [];
+  const selectedTotal = dayTotal(selectedDay);
 
   return (
     <div ref={gridRef} data-month-grid={month}>
@@ -163,6 +176,17 @@ export function MonthOverview({
                   >
                     {dayNumber(date)}
                   </span>
+                  {list.length > 0 ? (
+                    <span
+                      data-day-total={date}
+                      title={`${list.length} appointment${list.length === 1 ? "" : "s"} booked`}
+                      className={`ml-auto mr-0.5 rounded px-1 font-semibold tabular-nums
+                                  ${isWeek ? "py-0.5 text-[12px]" : "text-[10px]"}
+                                  ${outside && !isWeek ? "text-ink-faint" : "bg-brand/10 text-brand"}`}
+                    >
+                      {compactMoney(dayTotal(date))}
+                    </span>
+                  ) : null}
                   {/* Revealed on hover, but always reachable by keyboard. */}
                   <button
                     type="button"
@@ -256,7 +280,8 @@ export function MonthOverview({
                   data-selected={isSelected ? "true" : undefined}
                   onClick={() => setSelectedDay(date)}
                   aria-pressed={isSelected}
-                  aria-label={`${longDay(date)}, ${count} appointment${count === 1 ? "" : "s"}`}
+                  aria-label={`${longDay(date)}, ${count} appointment${count === 1 ? "" : "s"}${
+                    count > 0 ? `, ${compactMoney(dayTotal(date))} booked` : ""}`}
                   className={`flex min-h-[2.75rem] cursor-pointer flex-col items-center justify-center
                               gap-0.5 border-b border-r border-line/70 py-1 transition
                               last:border-r-0
@@ -273,12 +298,16 @@ export function MonthOverview({
                   >
                     {dayNumber(date)}
                   </span>
-                  {/* Density, not a number: three dots read faster than "3" and
-                      do not compete with the date. */}
-                  <span className="flex h-1 items-center gap-[2px]" aria-hidden="true">
-                    {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                      <span key={i} className="h-1 w-1 rounded-full bg-brand/60" />
-                    ))}
+                  {/* The day's booked total, in the box itself — the number a
+                      Master scans the week for. Bare digits, no "RM": a phone
+                      cell is ~48px and the currency is the same in every one. */}
+                  <span
+                    data-day-total={date}
+                    aria-hidden="true"
+                    className={`h-3 text-[9px] font-semibold leading-3 tabular-nums
+                                ${outside && !isWeek ? "text-ink-faint" : "text-brand"}`}
+                  >
+                    {count > 0 ? shortAmount(dayTotal(date)) : ""}
                   </span>
                 </button>
               );
@@ -288,7 +317,14 @@ export function MonthOverview({
 
         <div className="mt-3" data-day-agenda={selectedDay}>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink">{longDay(selectedDay)}</h2>
+            <h2 className="text-sm font-semibold text-ink">
+              {longDay(selectedDay)}
+              {selectedEntries.length > 0 ? (
+                <span data-selected-day-total className="ml-2 font-semibold tabular-nums text-brand">
+                  {compactMoney(selectedTotal)}
+                </span>
+              ) : null}
+            </h2>
             <button
               type="button"
               data-add-on={selectedDay}
