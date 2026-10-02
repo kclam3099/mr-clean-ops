@@ -52,9 +52,14 @@ export function AcknowledgeToday({
             else setDone(true);
           })
         }
+        // Red until tapped: it is the one thing on the page waiting on them,
+        // and it must not read as just another brand-blue button. Once done it
+        // turns into the green confirmation below.
+        data-ack-pending
         className="flex min-h-12 w-full cursor-pointer items-center justify-center gap-2
-                   rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white
-                   transition-colors duration-200 hover:bg-brand-700 active:bg-brand-900
+                   rounded-xl bg-danger px-4 py-3 text-base font-semibold text-white
+                   shadow-md shadow-danger/25 ring-2 ring-danger/30 ring-offset-2 ring-offset-surface
+                   transition-colors duration-200 hover:bg-rose-800 active:bg-rose-900
                    disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? (
@@ -67,6 +72,13 @@ export function AcknowledgeToday({
           </>
         ) : (
           <>
+            <svg aria-hidden viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 shrink-0">
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V6a1 1 0 0 1 1-1Zm0 10a1.25 1.25 0 1 0 0-2.5A1.25 1.25 0 0 0 10 15Z"
+                clipRule="evenodd"
+              />
+            </svg>
             {jobCount === 1
               ? t("I've seen today's job")
               : t("I've seen today's {count} jobs", { count: jobCount })}
