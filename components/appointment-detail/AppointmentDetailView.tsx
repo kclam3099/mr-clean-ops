@@ -10,10 +10,11 @@ import {
 } from "@/lib/appointments/lifecycle-actions";
 import { AppErrorCode, type AppError } from "@/lib/errors/appError";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { AddonsSection } from "./AddonsSection";
 import { OverrideDialog } from "@/components/appointment-form/OverrideDialog";
 import { ItemsEditor, initialItemRow, type ItemRow } from "@/components/appointment-form/ItemsEditor";
 import { estimatedDurationMinutes, formatDuration, formatMoney, subtotal } from "@/lib/pricing/duration";
-import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
+import { mapsHref, whatsappHref, whatsappChatHref, buildReminderMessage } from "@/lib/external-links";
 import { colourAt, staffInitials } from "@/lib/agenda/staff-colour";
 import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
@@ -78,12 +79,14 @@ export function AppointmentDetailView({
 
       {terminal ? (
         <p className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
-          This appointment is {detail.status}. It is kept as history and can no longer be changed.
+          This appointment is {detail.status}. It is kept as history and can no longer be changed
+          {capabilities.canAddAddon ? " — add-ons can still be recorded below." : "."}
         </p>
       ) : null}
 
       <Summary detail={detail} showWorkspace={showWorkspace} />
       <Items detail={detail} />
+      <AddonsSection detail={detail} canAdd={capabilities.canAddAddon} />
 
       {/* ---------------- actions ---------------- */}
       {!terminal ? (
@@ -226,6 +229,7 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
       customerName: detail.customerName, date: detail.date, startTime: detail.startTime,
     }),
   );
+  const chat = whatsappChatHref(detail.customerPhone);
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-card">
       {/* Money and time first, on their own band. They are what gets checked
@@ -269,7 +273,17 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
             className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#25D366] px-3.5
                        text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#1da851]">
             <WhatsAppIcon className="h-4 w-4" />
-            WhatsApp reminder
+            Reminder
+          </a>
+        ) : null}
+        {/* The same app with nothing prefilled: for anything that is not the
+            reminder — directions, a question, running late. */}
+        {chat ? (
+          <a href={chat} target="_blank" rel="noopener noreferrer"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#25D366] px-3.5
+                       text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#1da851]">
+            <WhatsAppIcon className="h-4 w-4" />
+            WhatsApp
           </a>
         ) : null}
         {detail.customerPhone ? (

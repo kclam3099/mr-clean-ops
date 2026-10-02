@@ -135,11 +135,11 @@ const RULES: Array<{
 
   {
     code: AppErrorCode.INVALID_APPOINTMENT_STATE,
-    test: /^Only a booked appointment can be\b/i,
+    test: /^Only a booked appointment can be\b|^Add-ons cannot be recorded on a cancelled appointment\b/i,
   },
   {
     code: AppErrorCode.VALIDATION_ERROR,
-    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b|^Invalid range\b|^Range too large\b|^Invalid amount\b|^start_time must be before end_time\b|^start_time and end_time must both be\b|^Already an active member\b|^No active membership found to end\b|^Not found\b/i,
+    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b|^Invalid range\b|^Range too large\b|^Invalid amount\b|^start_time must be before end_time\b|^start_time and end_time must both be\b|^Already an active member\b|^No active membership found to end\b|^Not found\b|^Appointment has no assigned staff to credit\b|^Add-on item is required\b/i,
   },
 ];
 

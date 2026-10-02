@@ -23,6 +23,19 @@ export type DetailItem = {
   lineTotal: number;
 };
 
+/**
+ * Extra work sold on site (migration 0013). Not part of totalAmount: items are
+ * what was booked and drive scheduling; add-ons are what was added afterwards.
+ */
+export type DetailAddon = {
+  id: string;
+  description: string;
+  amount: number;
+  createdAt: string;
+  /** Whether this caller may remove it — advisory; the RPC re-checks. */
+  canRemove: boolean;
+};
+
 export type AppointmentDetail = {
   id: string;
   status: "booked" | "completed" | "cancelled";
@@ -46,6 +59,12 @@ export type AppointmentDetail = {
   workspaceId: string;
   workspaceName: string | null;
   items: DetailItem[];
+  addons: DetailAddon[];
+  /**
+   * False when the add-on table could not be read — e.g. the app deployed ahead
+   * of migration 0013. The section is then hidden rather than shown empty.
+   */
+  addonsAvailable: boolean;
   /** True when this caller is the assigned staff member. */
   isOwnAppointment: boolean;
 };
@@ -114,8 +133,22 @@ export async function getAppointmentDetail(
 
   // The same ranking the agenda uses, so one person is one colour whether they
   // are seen in a month cell or on their own appointment.
-  const { data: staffRows } = await supabase.from("staff").select("id");
+  // Add-ons are read separately rather than embedded, so a database without
+  // migration 0013 degrades to "no add-on section" instead of breaking the
+  // whole appointment page. Same RLS predicate as the appointment itself.
+  const [{ data: staffRows }, addonRead] = await Promise.all([
+    supabase.from("staff").select("id"),
+    supabase
+      .from("appointment_addons")
+      .select("id, description, amount, created_by, created_at")
+      .eq("appointment_id", row.id)
+      .order("created_at"),
+  ]);
   const colours = staffColourIndexes((staffRows ?? []).map((r) => r.id as string));
+  const isOwn = session.staffId !== null && session.staffId === row.staff_id;
+  const addonRows = (addonRead.data ?? []) as Array<{
+    id: string; description: string; amount: string | number; created_by: string; created_at: string;
+  }>;
 
   return {
     id: row.id,
@@ -144,7 +177,17 @@ export async function getAppointmentDetail(
       unitPrice: Number(i.unit_price),
       lineTotal: i.line_total === null ? i.quantity * Number(i.unit_price) : Number(i.line_total),
     })),
-    isOwnAppointment: session.staffId !== null && session.staffId === row.staff_id,
+    addons: addonRows.map((a) => ({
+      id: a.id,
+      description: a.description,
+      amount: Number(a.amount),
+      createdAt: a.created_at,
+      // Mirrors remove_appointment_addon(): a Master of the workspace, or the
+      // staff member who recorded it while still assigned.
+      canRemove: session.isMaster || (isOwn && a.created_by === session.userId),
+    })),
+    addonsAvailable: !addonRead.error,
+    isOwnAppointment: isOwn,
   };
 }
 
@@ -163,6 +206,8 @@ export type AppointmentCapabilities = {
   canComplete: boolean;
   /** Only a Master may supply a large-job override reason. */
   canOverride: boolean;
+  /** Record extra work sold on site. Allowed after completion, too. */
+  canAddAddon: boolean;
 };
 
 export function capabilitiesFor(
@@ -185,6 +230,14 @@ export function capabilitiesFor(
     // see; 0009 surfaces it so this decision is real rather than assumed.
     canComplete: mutable && (isMaster || staffCanMarkCompleted),
     canOverride: isMaster,
+    // Unlike the booking itself, an add-on is usually recorded at or after the
+    // end of the job, so a completed appointment still takes one. Cancelled
+    // work earned nothing, and an unassigned job has nobody to credit.
+    canAddAddon:
+      detail.addonsAvailable &&
+      detail.status !== "cancelled" &&
+      detail.staffId !== null &&
+      (isMaster || detail.isOwnAppointment),
   };
 }
 
