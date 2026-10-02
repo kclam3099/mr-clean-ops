@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  normalisePhoneForWhatsApp, whatsappHref, mapsHref, buildReminderMessage,
+  normalisePhoneForWhatsApp, whatsappHref, whatsappChatHref, mapsHref, buildReminderMessage,
 } from "../../lib/external-links.ts";
 
 test("normalises Malaysian numbers to bare international form", () => {
@@ -90,4 +90,18 @@ test("reminder message includes the customer, a readable date and the time", () 
 test("reminder message survives an unparseable date without throwing", () => {
   const msg = buildReminderMessage({ customerName: "X", date: "not-a-date", startTime: "10:00" });
   assert.ok(msg.includes("not-a-date"));
+});
+
+test("reminder message is exactly the confirmation, with no invitation to change", () => {
+  const msg = buildReminderMessage({ customerName: "Sammy", date: "2026-10-03", startTime: "10:00" });
+  assert.equal(
+    msg,
+    "Hi Sammy, this is a reminder from Mr Clean & Clean. Your cleaning appointment is on Saturday 3 October at 10:00.",
+  );
+});
+
+test("whatsappChatHref opens the chat with no prefilled text", () => {
+  assert.equal(whatsappChatHref("012-345 6789"), "https://wa.me/60123456789");
+  assert.equal(whatsappChatHref("javascript:alert(1)"), null);
+  assert.equal(whatsappChatHref(null), null);
 });

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { AgendaAppointment } from "@/lib/agenda/queries";
-import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
+import { mapsHref, whatsappHref, whatsappChatHref, buildReminderMessage } from "@/lib/external-links";
 import { colourAt, staffInitials } from "@/lib/agenda/staff-colour";
 import {
   WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
@@ -49,6 +49,7 @@ export function AppointmentCard({
     a.customerPhone,
     buildReminderMessage({ customerName: a.customerName, date: a.date, startTime: a.startTime }),
   );
+  const chat = whatsappChatHref(a.customerPhone);
   const colour = colourAt(a.staffColourIndex);
   const cancelled = a.status === "cancelled";
 
@@ -160,7 +161,8 @@ export function AppointmentCard({
 
       {/* ---- actions, outside the link so a tap on one does not navigate ---- */}
       {!compact && (maps || a.customerPhone || whatsapp) ? (
-        <div className="flex gap-1.5 border-t border-line bg-sunken/50 px-3.5 py-2">
+        // Two by two on a phone: four buttons in one row overflow a 375px card.
+        <div className="grid grid-cols-2 gap-1.5 border-t border-line bg-sunken/50 px-3.5 py-2 sm:flex">
           {whatsapp ? (
             // Branded on purpose: the glyph and the green are how someone knows
             // which app is about to open before they tap. Deep link only — it
@@ -168,6 +170,20 @@ export function AppointmentCard({
             // automatically; the user reviews and presses send.
             <a
               href={whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5
+                         rounded-lg bg-[#25D366] px-2.5 text-xs font-semibold text-white
+                         transition-colors duration-200 hover:bg-[#1da851]"
+            >
+              <WhatsAppIcon className="h-4 w-4" />
+              Reminder
+            </a>
+          ) : null}
+          {chat ? (
+            // Same app, nothing prefilled — just opens the chat.
+            <a
+              href={chat}
               target="_blank"
               rel="noopener noreferrer"
               className="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5

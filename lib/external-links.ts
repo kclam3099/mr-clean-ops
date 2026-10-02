@@ -48,6 +48,16 @@ export function whatsappHref(
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
+/**
+ * `https://wa.me/<number>` with no prefilled text — just opens the chat with the
+ * customer. Null when the phone is unusable, same rule as whatsappHref.
+ */
+export function whatsappChatHref(phone: string | null | undefined): string | null {
+  const number = normalisePhoneForWhatsApp(phone);
+  if (!number) return null;
+  return `https://wa.me/${number}`;
+}
+
 /** Google Maps search link for a free-text address, or null when empty. */
 export function mapsHref(
   addressLine: string | null | undefined,
@@ -68,6 +78,10 @@ export function mapsHref(
  * empty and are deliberately not exposed through get_booking_config yet. When
  * they are populated, this becomes the fallback rather than the only option —
  * the shape here is what a template would need to fill.
+ *
+ * It ends at the time on purpose. The owner does not want the reminder to
+ * invite changes ("reply if you need to change it"): it confirms, it does not
+ * open a negotiation.
  */
 export function buildReminderMessage(input: {
   customerName: string;
@@ -83,7 +97,6 @@ export function buildReminderMessage(input: {
 
   return (
     `Hi ${input.customerName.trim()}, this is a reminder from Mr Clean & Clean. ` +
-    `Your cleaning appointment is on ${readable} at ${input.startTime}. ` +
-    `Please reply if you need to change it. Thank you!`
+    `Your cleaning appointment is on ${readable} at ${input.startTime}.`
   );
 }
