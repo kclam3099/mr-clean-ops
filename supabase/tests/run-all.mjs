@@ -20,6 +20,7 @@ const SUITES = [
   ['working-hours-boundary-regression', 'Working-hours midnight boundary (0008)'],
   ['past-appointment-recording-regression', 'Past appointment recording (0010)'],
   ['error-mapping-coverage-regression', 'Privacy-safe error mapping coverage'],
+  ['staff-acknowledgement-regression', 'Daily staff acknowledgement (0012)'],
 ];
 
 const results = [];

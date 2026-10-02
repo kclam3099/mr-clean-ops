@@ -4,6 +4,8 @@ import { getSessionContext } from "@/lib/auth/session";
 import { getStaffAgenda, businessToday, singleDay } from "@/lib/agenda/queries";
 import { AgendaList } from "@/components/agenda/AgendaList";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
+import { AcknowledgeToday } from "@/components/agenda/AcknowledgeToday";
+import { createClient } from "@/lib/supabase/serverClient";
 import { formatDateHeading } from "@/components/agenda/AgendaList";
 
 export const metadata = { title: "Today — Mr Clean & Clean Ops" };
@@ -14,6 +16,21 @@ export default async function TodayPage() {
 
   const today = businessToday();
   const result = await getStaffAgenda(session, singleDay(today));
+
+  // Whether this person has already confirmed today. Read through RLS like
+  // everything else: the self-select policy returns their own row and nothing
+  // else, so a staff member cannot probe anyone's morning but their own.
+  let acknowledged = false;
+  if (session.staffId) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("staff_day_acknowledgements")
+      .select("id")
+      .eq("staff_id", session.staffId)
+      .eq("ack_date", today)
+      .maybeSingle();
+    acknowledged = Boolean(data);
+  }
 
   return (
     <div className="space-y-4">
@@ -29,6 +46,15 @@ export default async function TodayPage() {
           + New
         </Link>
       </div>
+
+      {/* Above the list, because it is the thing to do before leaving, and
+          below the heading, because it is about what the list contains. */}
+      {result.ok ? (
+        <AcknowledgeToday
+          jobCount={result.appointments.length}
+          acknowledged={acknowledged}
+        />
+      ) : null}
 
       {result.ok ? (
         <AgendaList

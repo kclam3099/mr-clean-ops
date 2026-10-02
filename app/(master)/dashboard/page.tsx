@@ -7,6 +7,8 @@ import {
   monthKey, monthLabel, addMonths, sameMonth,
 } from "@/lib/agenda/queries";
 import { MonthOverview, type MonthEntry } from "@/components/dashboard/MonthOverview";
+import { StaffDayStatusPanel } from "@/components/dashboard/StaffDayStatusPanel";
+import { getStaffDayStatus } from "@/lib/agenda/staff-status";
 import { compactMoney } from "@/lib/pricing/duration";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 
@@ -51,7 +53,12 @@ export default async function DashboardPage({
   const range = monthGridRange(anchor);
   const days = monthGridDays(anchor);
 
-  const result = await getMasterAgenda(session, scope, range);
+  // Both reads are RLS-filtered and independent, so they go together rather
+  // than making the morning panel wait for the month grid.
+  const [result, dayStatus] = await Promise.all([
+    getMasterAgenda(session, scope, range),
+    getStaffDayStatus(session, scope, today),
+  ]);
 
   const scopeValue = scope.kind === "workspace" ? scope.workspaceId : ALL_OPERATIONS;
   const monthHref = (m: string) => {
@@ -101,6 +108,10 @@ export default async function DashboardPage({
   const inMonth = entries.filter((e) => sameMonth(e.date, anchor));
   const revenue = inMonth.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0);
   const largeJobs = inMonth.filter((e) => e.isLargeJob).length;
+
+  const statusPanel = dayStatus.ok ? (
+    <StaffDayStatusPanel rows={dayStatus.rows} />
+  ) : null;
 
   return (
     <div className="space-y-4">
@@ -162,6 +173,10 @@ export default async function DashboardPage({
           ) : null}
         </p>
       </div>
+
+      {/* First thing on the page: who is up and has seen today's work.
+          The month is the context; this is the thing that needs acting on. */}
+      {statusPanel}
 
       <MonthOverview
         /* Remount on a month change: the selected day and any open popover

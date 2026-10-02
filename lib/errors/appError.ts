@@ -117,7 +117,7 @@ const RULES: Array<{
   // member is unavailable — misleading, and wrong.
   {
     code: AppErrorCode.NOT_AUTHORIZED,
-    test: /^Not authorized\b|^Only (a )?(Super Master|Master)\b|may not (override|perform)\b|^Not an active member\b|^No staff profile\b|^Not your appointment\b|^Appointment not found\b|^Staff completion is currently disabled\b|^Moving an appointment to a different workspace\b/i,
+    test: /^Not authorized\b|^Only (a )?(Super Master|Master)\b|may not (override|perform)\b|^Not an active member\b|^No staff profile\b|^no staff identity\b|^Not your appointment\b|^Appointment not found\b|^Staff completion is currently disabled\b|^Moving an appointment to a different workspace\b/i,
   },
 
   { code: AppErrorCode.TIME_OFF, test: /\btime off\b|\bfull day off\b/i },
