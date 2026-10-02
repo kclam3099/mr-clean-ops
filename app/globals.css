@@ -1,26 +1,119 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Brand
+   ---------------------------------------------------------------------------
+   Sampled from the company logo rather than eyeballed, so the UI and the van
+   decals are the same navy. The dominant ink is #193498; the gold is the
+   wordmark fill. There is no red in the mark -- the Chinese headline reads red
+   at a glance but samples as gold, which is why it is not in this palette.
+
+   Gold is the brightest thing here and it is deliberately rationed. On white
+   it carries a 1.8:1 contrast ratio, which is fine for a 3px rule or a filled
+   chip with dark text on it, and unreadable as text. Anywhere a value had to
+   be legible, navy does the work.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand-navy: #193498;
+  --brand-navy-700: #152b7e;
+  --brand-navy-900: #0f1f5c;
+  --brand-blue: #004aad;
+  --brand-gold: #fab60a;
+  --brand-amber: #ffc107;
+
+  /* Surfaces. A faint blue-grey rather than pure grey, so white cards lift off
+     the page without needing a shadow heavy enough to look like a dialog. */
+  --surface: #f4f6fb;
+  --surface-card: #ffffff;
+  --surface-sunken: #eceffa;
+
+  --ink: #0f172a;
+  --ink-muted: #475569;
+  --ink-faint: #64748b;
+  --line: #dde3f0;
+
+  --ok: #047857;
+  --warn: #b45309;
+  --danger: #be123c;
+
+  --radius: 0.75rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand: var(--brand-navy);
+  --color-brand-700: var(--brand-navy-700);
+  --color-brand-900: var(--brand-navy-900);
+  --color-brand-blue: var(--brand-blue);
+  --color-gold: var(--brand-gold);
+  --color-amber: var(--brand-amber);
+
+  --color-surface: var(--surface);
+  --color-card: var(--surface-card);
+  --color-sunken: var(--surface-sunken);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* This app ships light only.
+   The scaffold shipped a prefers-color-scheme block that flipped --background
+   and --foreground while every component kept its explicit bg-white and
+   text-slate-900. The result for anyone whose phone is in dark mode was a page
+   that was half inverted: dark behind white cards, and body text that had gone
+   light on light wherever a component had not set its own colour. Staff work
+   outdoors with their phones on auto dark; this is not hypothetical. If dark
+   mode is wanted later it has to be designed, not inherited. */
+
+html {
+  background: var(--surface);
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Phones in landscape, and iOS notches, both eat into the usable width. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* A visible focus ring is the only way a keyboard user knows where they are.
+   Scoped to :focus-visible so it does not fire on every mouse click. */
+:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Field staff tap these with wet or gloved hands. 44px is the floor, not the
+   target; most controls here are 48. */
+button,
+[role="button"],
+a[href],
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

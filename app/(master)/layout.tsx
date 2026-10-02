@@ -22,7 +22,7 @@ export default async function MasterLayout({ children }: { children: React.React
   const scope = resolveScope(session, null);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface">
       <MasterNav session={session} scope={scope} />
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
       {/* The assignment list is NOT passed here — the sheet fetches it on open,

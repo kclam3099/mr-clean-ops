@@ -50,9 +50,11 @@ export function WorkspaceScopeSelector({
         data-scope-selector
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm
-                   font-medium text-slate-900 focus:border-slate-900 focus:outline-none
-                   focus:ring-1 focus:ring-slate-900"
+        className="min-h-11 max-w-44 cursor-pointer truncate rounded-lg border border-white/25
+                   bg-white/15 px-2.5 text-sm font-medium text-white
+                   transition-colors duration-200 hover:bg-white/25
+                   focus:border-white/60 focus:outline-none focus:ring-2 focus:ring-white/40
+                   [&>option]:bg-white [&>option]:text-ink"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

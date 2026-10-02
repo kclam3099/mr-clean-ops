@@ -11,14 +11,20 @@
       "Bash(vercel env add:*)",
       "Bash(vercel env rm:*)",
       "Bash(vercel --prod)",
-      "Bash(vercel deploy --prod)"
+      "Bash(vercel deploy --prod)",
+      "Bash(vercel domains ls:*)",
+      "Bash(vercel domains inspect:*)",
+      "Bash(vercel domains add:*)"
     ],
     "deny": [
       "Bash(vercel remove:*)",
       "Bash(vercel rm:*)",
       "Bash(vercel project rm:*)",
       "Bash(vercel project remove:*)",
-      "Bash(vercel domains:*)",
+      "Bash(vercel domains rm:*)",
+      "Bash(vercel domains remove:*)",
+      "Bash(vercel domains transfer-in:*)",
+      "Bash(vercel domains move:*)",
       "Bash(vercel dns:*)",
       "Bash(vercel alias:*)",
       "Bash(vercel teams:*)",

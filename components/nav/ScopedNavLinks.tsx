@@ -29,7 +29,7 @@ export function ScopedNavLinks({
   const current = options.some((o) => o.value === requested) ? (requested as string) : "all";
 
   return (
-    <nav className="flex flex-wrap items-center gap-1">
+    <nav className="flex items-center gap-0.5 pb-px">
       {links.map((l) => (
         <NavLink
           key={l.path}

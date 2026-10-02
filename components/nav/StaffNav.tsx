@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { SessionContext } from "@/lib/auth/session";
 import { SignOutButton } from "./SignOutButton";
 import { NavLink } from "./NavLink";
@@ -21,14 +22,28 @@ export function StaffNav({ session }: { session: SessionContext }) {
   ];
 
   return (
-    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-      <div className="flex items-center justify-between px-4 pt-3">
-        <span className="text-sm font-semibold tracking-tight text-slate-900">
+    <header className="sticky top-0 z-30 bg-brand shadow-sm shadow-brand-900/20">
+      <div className="flex items-center gap-2.5 px-4 pt-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-0.5">
+          <Image
+            src="/brand/mark.png"
+            alt=""
+            width={64}
+            height={64}
+            className="h-full w-full object-contain"
+          />
+        </span>
+        {/* Their own name, because this shell only ever shows their own work —
+            it is the answer to "whose agenda am I looking at", which matters on
+            a shared phone in a van. */}
+        <span className="truncate text-sm font-semibold tracking-tight text-white">
           {session.fullName}
         </span>
-        <SignOutButton />
+        <div className="ml-auto shrink-0">
+          <SignOutButton />
+        </div>
       </div>
-      <nav className="flex gap-1 px-3 pb-2 pt-1">
+      <nav className="flex gap-0.5 px-3 pb-px pt-1">
         {links.map((l) => (
           <NavLink key={l.path} href={l.path} label={l.label} />
         ))}

@@ -8,17 +8,27 @@ export function NavLink({ href, label }: { href: string; label: string }) {
   const path = href.split("?")[0] as string;
   const active = pathname === path || (path !== "/" && pathname.startsWith(`${path}/`));
 
+  // The active item is marked by a gold underline AND a weight change, not by
+  // colour alone. Someone who cannot separate gold from white — or who is
+  // outside with the screen washed out — still sees which page they are on.
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`rounded-md px-2.5 py-1.5 text-sm transition ${
-        active
-          ? "bg-slate-900 text-white"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-      }`}
+      className={`relative flex min-h-11 cursor-pointer items-center whitespace-nowrap rounded-lg px-3
+                  text-sm transition-colors duration-200 ${
+                    active
+                      ? "font-semibold text-white"
+                      : "font-medium text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
     >
       {label}
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-gold"
+        />
+      ) : null}
     </Link>
   );
 }

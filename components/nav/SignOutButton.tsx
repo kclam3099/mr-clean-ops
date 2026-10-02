@@ -40,8 +40,9 @@ export function SignOutButton({ className = "" }: { className?: string }) {
           window.location.replace("/login");
         })
       }
-      className={`rounded-md px-2.5 py-1.5 text-sm text-slate-500 transition
-                  hover:bg-slate-100 hover:text-slate-900 disabled:opacity-60 ${className}`}
+      className={`flex min-h-11 cursor-pointer items-center whitespace-nowrap rounded-lg px-3
+                  text-sm font-medium text-white/80 transition-colors duration-200
+                  hover:bg-white/15 hover:text-white disabled:opacity-60 ${className}`}
     >
       {pending ? "Signing out…" : "Sign out"}
     </button>

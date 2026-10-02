@@ -16,7 +16,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   if (!session.staffId) redirect(homePathFor(session.role));
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface">
       <StaffNav session={session} />
       <main className="mx-auto max-w-2xl px-4 py-5">{children}</main>
       {/* Staff Quick Add is one step — no assignment list is ever fetched. */}
