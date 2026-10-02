@@ -19,6 +19,7 @@ import { getI18n } from "@/lib/i18n/server";
 export async function StaffNav({ session }: { session: SessionContext }) {
   const { t } = await getI18n();
   const links = [
+    { path: "/my/calendar", label: t("Calendar") },
     { path: "/my/today", label: t("Today") },
     { path: "/my/tomorrow", label: t("Tomorrow") },
     { path: "/my/month", label: t("Month") },

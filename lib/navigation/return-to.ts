@@ -11,6 +11,7 @@ export const RETURN_DESTINATIONS = {
   calendar: "/calendar",
   appointments: "/appointments",
   availability: "/availability",
+  mycalendar: "/my/calendar",
   today: "/my/today",
   tomorrow: "/my/tomorrow",
   month: "/my/month",
@@ -24,12 +25,12 @@ export function isReturnKey(value: unknown): value is ReturnKey {
 
 /** Unknown, absent or hostile input resolves to the role's default. */
 export function resolveReturnPath(value: unknown, mode: "master" | "staff"): string {
-  const fallback = mode === "staff" ? RETURN_DESTINATIONS.today : RETURN_DESTINATIONS.calendar;
+  const fallback = mode === "staff" ? RETURN_DESTINATIONS.mycalendar : RETURN_DESTINATIONS.calendar;
   if (!isReturnKey(value)) return fallback;
 
   // A staff member cannot be returned to a Master route, and vice versa —
   // otherwise a valid key from the wrong role bounces them through a redirect.
-  const staffKeys: ReturnKey[] = ["today", "tomorrow", "month"];
+  const staffKeys: ReturnKey[] = ["mycalendar", "today", "tomorrow", "month"];
   const isStaffKey = staffKeys.includes(value);
   if (mode === "staff" && !isStaffKey) return fallback;
   if (mode === "master" && isStaffKey) return fallback;

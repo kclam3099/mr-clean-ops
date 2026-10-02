@@ -25,7 +25,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-surface">
       <StaffNav session={session} />
-      <main className="mx-auto max-w-2xl px-4 py-5">{children}</main>
+      <main className="mx-auto max-w-2xl px-4 py-5 has-[[data-wide]]:max-w-7xl">{children}</main>
       {/* Staff Quick Add is one step — no assignment list is ever fetched. */}
       <QuickAddFab businessNow={businessNowLocal()} />
     </div>

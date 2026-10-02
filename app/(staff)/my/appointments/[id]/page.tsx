@@ -40,7 +40,7 @@ export default async function StaffAppointmentDetailPage({
       config={config}
       // Only when this person genuinely belongs to more than one workspace.
       showWorkspace={session.workspaces.length > 1}
-      backHref="/my/today"
+      backHref="/my/calendar"
     />
   );
 }
@@ -54,10 +54,10 @@ async function NotAvailable() {
         {t("This appointment does not exist, or is no longer available.")}
       </p>
       <Link
-        href="/my/today"
+        href="/my/calendar"
         className="mt-6 inline-block rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
       >
-        {t("Back to today")}
+        {t("Back to calendar")}
       </Link>
     </div>
   );

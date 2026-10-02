@@ -47,7 +47,7 @@ export default async function NewStaffAppointmentPage({
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("New appointment")}</h1>
         <Link
-          href="/my/today"
+          href="/my/calendar"
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
         >
           {t("Cancel")}

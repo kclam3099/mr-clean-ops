@@ -55,7 +55,7 @@ async function requireVisible(appointmentId: string) {
 function revalidateAll(appointmentId: string) {
   for (const path of [
     "/calendar", "/appointments", `/appointments/${appointmentId}`,
-    "/my/today", "/my/tomorrow", "/my/month", `/my/appointments/${appointmentId}`,
+    "/my/calendar", "/my/today", "/my/tomorrow", "/my/month", `/my/appointments/${appointmentId}`,
   ]) {
     revalidatePath(path);
   }

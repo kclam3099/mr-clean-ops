@@ -35,7 +35,7 @@ export async function acknowledgeTodayAction(): Promise<AcknowledgeState> {
 
   // The staff shells read this on every page, so refresh all of them rather
   // than only the one the button happened to be on.
-  for (const path of ["/my/today", "/my/tomorrow", "/my/month"]) {
+  for (const path of ["/my/calendar", "/my/today", "/my/tomorrow", "/my/month"]) {
     revalidatePath(path);
   }
 

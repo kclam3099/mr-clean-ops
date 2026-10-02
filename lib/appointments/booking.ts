@@ -93,7 +93,7 @@ export async function bookAppointment(
 
   // Refresh every surface that could show the new row. Cheap, and avoids a
   // stale agenda after redirect or an in-place refresh.
-  for (const path of ["/dashboard", "/calendar", "/appointments", "/my/today", "/my/tomorrow", "/my/month"]) {
+  for (const path of ["/dashboard", "/calendar", "/appointments", "/my/calendar", "/my/today", "/my/tomorrow", "/my/month"]) {
     revalidatePath(path);
   }
 

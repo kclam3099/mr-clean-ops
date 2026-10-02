@@ -1,5 +1,6 @@
 /** Simplified Chinese for the schedule area. Key = the exact English source text. */
 export const schedule: Record<string, string> = {
+  "My calendar": "我的日历",
   // ---- dashboard ----
   "Dashboard": "总览",
   "Week overview": "本周概览",
