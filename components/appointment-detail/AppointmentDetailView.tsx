@@ -14,6 +14,10 @@ import { OverrideDialog } from "@/components/appointment-form/OverrideDialog";
 import { ItemsEditor, initialItemRow, type ItemRow } from "@/components/appointment-form/ItemsEditor";
 import { estimatedDurationMinutes, formatDuration, formatMoney, subtotal } from "@/lib/pricing/duration";
 import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
+import { staffColour, staffInitials } from "@/lib/agenda/staff-colour";
+import {
+  WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
+} from "@/components/ui/icons";
 
 type Panel = "none" | "customer" | "items" | "reschedule";
 /** Which action a pending override retry belongs to. */
@@ -73,7 +77,7 @@ export function AppointmentDetailView({
       {result?.status === "error" && !override ? <ErrorNotice error={result.error} /> : null}
 
       {terminal ? (
-        <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <p className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
           This appointment is {detail.status}. It is kept as history and can no longer be changed.
         </p>
       ) : null}
@@ -164,24 +168,50 @@ function Header({ detail, showWorkspace, backHref }: {
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+          <h1 className="text-lg font-semibold tracking-tight text-ink">
             {detail.customerName}
           </h1>
           <StatusBadge status={detail.status} />
           {detail.isLargeJob ? (
-            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
+            // Gold as a FILL with navy ink on it, which is how the logo uses
+            // it. Gold as text on white is 1.8:1 and unreadable; gold as a
+            // ground with dark ink clears 4.5:1 and still shouts.
+            <span className="flex items-center gap-1 rounded-full bg-gold px-2.5 py-0.5 text-xs font-bold text-brand-900">
+              <StarIcon className="h-3 w-3" />
               Large job
             </span>
           ) : null}
         </div>
-        <p className="mt-1 text-sm text-slate-500">
-          {formatDate(detail.date)} · <span className="font-mono tabular-nums">{detail.startTime}–{detail.endTime}</span>
-          {detail.staffName ? ` · ${detail.staffName}` : ""}
-          {showWorkspace && detail.workspaceName ? ` · ${detail.workspaceName}` : ""}
-        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-ink-muted">
+          <span className="flex items-center gap-1.5 rounded-lg bg-brand px-2 py-1 font-bold tabular-nums text-white">
+            <ClockIcon className="h-3.5 w-3.5 text-gold" />
+            {detail.startTime}–{detail.endTime}
+          </span>
+          <span>{formatDate(detail.date)}</span>
+          {detail.staffName ? (
+            <span
+              className={`flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2 text-xs font-semibold
+                          ${staffColour(detail.staffId ?? null).bg} ${staffColour(detail.staffId ?? null).text}`}
+            >
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-[8px] font-bold
+                            text-white ${staffColour(detail.staffId ?? null).solid}`}
+              >
+                {staffInitials(detail.staffName)}
+              </span>
+              {detail.staffName}
+            </span>
+          ) : null}
+          {showWorkspace && detail.workspaceName ? (
+            <span className="rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-ink-muted">
+              {detail.workspaceName}
+            </span>
+          ) : null}
+        </div>
       </div>
       <a href={backHref}
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+        className="shrink-0 cursor-pointer rounded-lg border border-line bg-card px-3 py-2 text-sm
+                   font-medium text-ink transition-colors duration-200 hover:bg-sunken">
         Back
       </a>
     </div>
@@ -197,35 +227,67 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
     }),
   );
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
-      <dl className="grid gap-3 sm:grid-cols-2">
+    <section className="overflow-hidden rounded-xl border border-line bg-card">
+      {/* Money and time first, on their own band. They are what gets checked
+          in the van before knocking, and they were two labels down a list of
+          six. */}
+      <div className="flex flex-wrap gap-x-6 gap-y-3 border-b-2 border-gold bg-sunken px-4 py-3">
+        <div>
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+            <MoneyIcon className="h-3 w-3" /> Total
+          </p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-brand">
+            {formatMoney(detail.totalAmount)}
+          </p>
+        </div>
+        <div>
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+            <ClockIcon className="h-3 w-3" /> Duration
+          </p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-ink">
+            {formatDuration(detail.durationMin)}
+            <span className="ml-1 text-xs font-normal text-ink-faint">
+              +{detail.bufferMin}m buffer
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <dl className="grid gap-3 p-4 sm:grid-cols-2">
         <Row label="Phone" value={detail.customerPhone ?? "—"} />
         <Row label="Area" value={detail.areaCity ?? "—"} />
         <Row label="Address" value={detail.addressLine ?? "—"} wide />
-        <Row label="Total" value={formatMoney(detail.totalAmount)} />
-        <Row label="Duration" value={`${formatDuration(detail.durationMin)} (+${detail.bufferMin} min buffer)`} />
         {showWorkspace ? <Row label="Workspace" value={detail.workspaceName ?? "—"} /> : null}
         {detail.remarks ? <Row label="Notes" value={detail.remarks} wide /> : null}
       </dl>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {maps ? (
-          <a href={maps} target="_blank" rel="noopener noreferrer"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
-            Directions
+      <div className="flex flex-wrap gap-2 border-t border-line bg-sunken/50 px-4 py-3">
+        {/* Branded on purpose: the glyph and the green say which app opens,
+            before the tap. Deep link only — it prefills the reminder and never
+            sends it; the user presses send in WhatsApp itself. */}
+        {whatsapp ? (
+          <a href={whatsapp} target="_blank" rel="noopener noreferrer"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-[#25D366] px-3.5
+                       text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#1da851]">
+            <WhatsAppIcon className="h-4 w-4" />
+            WhatsApp reminder
           </a>
         ) : null}
         {detail.customerPhone ? (
           <a href={`tel:${detail.customerPhone}`}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-line
+                       bg-card px-3.5 text-sm font-semibold text-ink transition-colors duration-200
+                       hover:bg-sunken">
+            <PhoneIcon className="h-4 w-4 text-ok" />
             Call
           </a>
         ) : null}
-        {/* Opens WhatsApp with the reminder prefilled. Nothing is sent without
-            the user pressing send in WhatsApp itself. */}
-        {whatsapp ? (
-          <a href={whatsapp} target="_blank" rel="noopener noreferrer"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
-            WhatsApp reminder
+        {maps ? (
+          <a href={maps} target="_blank" rel="noopener noreferrer"
+            className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-line
+                       bg-card px-3.5 text-sm font-semibold text-ink transition-colors duration-200
+                       hover:bg-sunken">
+            <MapPinIcon className="h-4 w-4 text-danger" />
+            Directions
           </a>
         ) : null}
       </div>
@@ -235,22 +297,25 @@ function Summary({ detail, showWorkspace }: { detail: AppointmentDetail; showWor
 
 function Items({ detail }: { detail: AppointmentDetail }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white">
-      <h2 className="border-b border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">Services</h2>
-      <ul className="divide-y divide-slate-100">
+    <section className="overflow-hidden rounded-xl border border-line bg-card">
+      <h2 className="flex items-center gap-2 bg-brand px-4 py-2.5 text-sm font-semibold text-white">
+        <span aria-hidden className="h-4 w-1 rounded-full bg-gold" />
+        Services
+      </h2>
+      <ul className="divide-y divide-line">
         {detail.items.map((i) => (
           <li key={i.id} className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-sm">
-            <span className="min-w-0 text-slate-800">
+            <span className="min-w-0 text-ink">
               {i.description}
-              {i.quantity > 1 ? <span className="text-slate-500"> × {i.quantity}</span> : null}
+              {i.quantity > 1 ? <span className="text-ink-muted"> × {i.quantity}</span> : null}
             </span>
-            <span className="shrink-0 tabular-nums text-slate-700">{formatMoney(i.lineTotal)}</span>
+            <span className="shrink-0 tabular-nums font-medium text-ink">{formatMoney(i.lineTotal)}</span>
           </li>
         ))}
       </ul>
-      <div className="flex justify-between border-t border-slate-200 px-4 py-2.5 text-sm font-semibold">
-        <span className="text-slate-700">Total</span>
-        <span className="tabular-nums text-slate-900">{formatMoney(detail.totalAmount)}</span>
+      <div className="flex justify-between border-t-2 border-gold bg-sunken px-4 py-3 text-sm font-bold">
+        <span className="text-ink">Total</span>
+        <span className="tabular-nums text-brand">{formatMoney(detail.totalAmount)}</span>
       </div>
     </section>
   );
@@ -309,11 +374,11 @@ function ItemsPanel({ detail, config, pending, fieldError, onSubmit, onCancel }:
       }} className="space-y-3">
         <ItemsEditor rows={rows} onChange={setRows}
           errors={(fieldError("items") ? { items: fieldError("items")! } : {})} disabled={pending} />
-        <div className="flex justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-          <span className="text-slate-600">New total</span>
-          <span className="font-semibold tabular-nums text-slate-900">{formatMoney(total)}</span>
+        <div className="flex justify-between rounded-lg bg-sunken px-3 py-2 text-sm">
+          <span className="text-ink-muted">New total</span>
+          <span className="font-semibold tabular-nums text-ink">{formatMoney(total)}</span>
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-muted">
           Estimated duration {formatDuration(estimate)}. The final duration and whether the new
           time still fits are confirmed by the system when you save.
         </p>
@@ -350,7 +415,7 @@ function ReschedulePanel({ detail, pending, fieldError, onSubmit, onCancel }: {
         className="space-y-3">
         <input type="hidden" name="appointmentId" value={detail.id} />
         <div className="space-y-1">
-          <label htmlFor="apptDate" className="block text-sm font-medium text-slate-700">Date</label>
+          <label htmlFor="apptDate" className="block text-sm font-medium text-ink">Date</label>
           <input id="apptDate" name="apptDate" type="date" value={date}
             onChange={(e) => setDate(e.target.value)} disabled={pending} className={inputClass} />
           {fieldError("apptDate") ? <p className="text-sm text-red-600">{fieldError("apptDate")}</p> : null}
@@ -362,19 +427,19 @@ function ReschedulePanel({ detail, pending, fieldError, onSubmit, onCancel }: {
               <button key={t} type="button" onClick={() => setTime(t)} disabled={pending}
                 aria-pressed={time === t}
                 className={`rounded-lg border px-3 py-2 font-mono text-sm tabular-nums transition ${
-                  time === t ? "border-slate-900 bg-slate-900 text-white"
-                             : "border-slate-300 bg-white text-slate-800 hover:border-slate-400"}`}>
+                  time === t ? "border-brand bg-brand text-white"
+                             : "border-line bg-card text-ink hover:border-brand/50"}`}>
                 {t}
               </button>
             ))}
           </div>
         ) : null}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-muted">
           Available when checked — final availability is confirmed when saving.
         </p>
 
         <div className="space-y-1">
-          <label htmlFor="startTime" className="block text-sm font-medium text-slate-700">Time</label>
+          <label htmlFor="startTime" className="block text-sm font-medium text-ink">Time</label>
           <input id="startTime" name="startTime" type="time" value={time}
             onChange={(e) => setTime(e.target.value)} disabled={pending} className={inputClass} />
           {fieldError("startTime") ? <p className="text-sm text-red-600">{fieldError("startTime")}</p> : null}
@@ -393,36 +458,36 @@ function ConfirmDialog({ kind, pending, onConfirm, onCancel }: {
   const isCancel = kind === "cancel";
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="confirm-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-        <h2 id="confirm-title" className="text-base font-semibold text-slate-900">
+      className="fixed inset-0 z-50 flex items-end justify-center bg-brand/40 p-4 sm:items-center">
+      <div className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl">
+        <h2 id="confirm-title" className="text-base font-semibold text-ink">
           {isCancel ? "Cancel this appointment?" : "Mark this appointment completed?"}
         </h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-ink-muted">
           {isCancel
             ? "It becomes history. It cannot be rescheduled, completed or restored afterwards."
             : "It becomes history. It cannot be edited, rescheduled or cancelled afterwards."}
         </p>
         {isCancel ? (
           <>
-            <label htmlFor="cancel-reason" className="mt-4 block text-sm font-medium text-slate-700">
-              Reason <span className="font-normal text-slate-400">(optional)</span>
+            <label htmlFor="cancel-reason" className="mt-4 block text-sm font-medium text-ink">
+              Reason <span className="font-normal text-ink-faint">(optional)</span>
             </label>
             <textarea id="cancel-reason" rows={2} value={reason} maxLength={500}
               onChange={(e) => setReason(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-base
-                         focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
+              className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-base
+                         focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue" />
           </>
         ) : null}
         <div className="mt-5 flex gap-2">
           <button type="button" onClick={onCancel} disabled={pending}
-            className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+            className="flex-1 rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-sunken">
             Keep it
           </button>
           <button type="button" disabled={pending}
             onClick={() => onConfirm(isCancel ? reason.trim() || undefined : undefined)}
             className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition disabled:opacity-50 ${
-              isCancel ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-slate-800"}`}>
+              isCancel ? "bg-red-600 hover:bg-red-700" : "bg-brand hover:bg-brand-700"}`}>
             {pending ? "Working…" : isCancel ? "Cancel appointment" : "Mark completed"}
           </button>
         </div>
@@ -434,15 +499,15 @@ function ConfirmDialog({ kind, pending, onConfirm, onCancel }: {
 /* ------------------------------------------------------------------ atoms */
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2.5 text-base text-slate-900 " +
-  "focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900";
+  "w-full rounded-lg border border-line px-3 py-2.5 text-base text-ink " +
+  "focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue";
 
 function Panel({ title, children, onCancel }: { title: string; children: React.ReactNode; onCancel: () => void }) {
   return (
-    <section className="rounded-xl border border-slate-300 bg-white p-4">
+    <section className="rounded-xl border border-line bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <button type="button" onClick={onCancel} className="text-sm text-slate-500 hover:text-slate-900">Close</button>
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        <button type="button" onClick={onCancel} className="text-sm text-ink-muted hover:text-ink">Close</button>
       </div>
       {children}
     </section>
@@ -454,8 +519,8 @@ function Field({ label, name, defaultValue, error, disabled, optional }: {
 }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={name} className="block text-sm font-medium text-slate-700">
-        {label}{optional ? <span className="ml-1 font-normal text-slate-400">(optional)</span> : null}
+      <label htmlFor={name} className="block text-sm font-medium text-ink">
+        {label}{optional ? <span className="ml-1 font-normal text-ink-faint">(optional)</span> : null}
       </label>
       <input id={name} name={name} defaultValue={defaultValue} disabled={disabled} className={inputClass} />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -469,11 +534,11 @@ function SaveRow({ pending, onCancel, label = "Save changes" }: {
   return (
     <div className="flex gap-2 pt-1">
       <button type="button" onClick={onCancel} disabled={pending}
-        className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+        className="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-sunken">
         Cancel
       </button>
       <button type="submit" disabled={pending}
-        className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50">
+        className="flex-1 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-50">
         {pending ? "Saving…" : label}
       </button>
     </div>
@@ -486,9 +551,9 @@ function Action({ label, onClick, active, tone }: {
   return (
     <button type="button" onClick={onClick}
       className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
-        active ? "border-slate-900 bg-slate-900 text-white"
-        : tone === "danger" ? "border-red-300 bg-white text-red-700 hover:bg-red-50"
-        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>
+        active ? "border-brand bg-brand text-white"
+        : tone === "danger" ? "border-red-300 bg-card text-red-700 hover:bg-red-50"
+        : "border-line bg-card text-ink hover:bg-sunken"}`}>
       {label}
     </button>
   );
@@ -497,8 +562,8 @@ function Action({ label, onClick, active, tone }: {
 function Row({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
   return (
     <div className={wide ? "sm:col-span-2" : undefined}>
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 text-sm text-slate-800">{value}</dd>
+      <dt className="text-xs uppercase tracking-wide text-ink-muted">{label}</dt>
+      <dd className="mt-0.5 text-sm text-ink">{value}</dd>
     </div>
   );
 }
@@ -507,7 +572,7 @@ function StatusBadge({ status }: { status: AppointmentDetail["status"] }) {
   const styles = {
     booked: "bg-blue-100 text-blue-800",
     completed: "bg-green-100 text-green-800",
-    cancelled: "bg-slate-200 text-slate-700",
+    cancelled: "bg-sunken text-ink-muted",
   } as const;
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status]}`}>
