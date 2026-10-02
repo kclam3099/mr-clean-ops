@@ -45,7 +45,7 @@ export default async function LoginPage() {
       <div className="flex flex-1 flex-col items-center px-4 pb-10">
         {/* Pulled up over the seam so the card is clearly the thing to act on,
             and the fold is not a dead horizontal line across the screen. */}
-        <div className="-mt-10 w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-xl shadow-brand-900/10">
+        <div className="relative z-10 -mt-10 w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-xl shadow-brand-900/10">
           <LoginForm />
         </div>
 
