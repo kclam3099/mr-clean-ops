@@ -74,6 +74,7 @@ export async function RangeCalendar({
   staff,
   detailHrefBase,
   beforeGrid,
+  showSummary = true,
 }: {
   cal: ResolvedCalendar;
   today: string;
@@ -86,6 +87,8 @@ export async function RangeCalendar({
   detailHrefBase: string;
   /** Whatever needs acting on today, shown between the controls and the grid. */
   beforeGrid?: React.ReactNode;
+  /** The range's count and total. A Master's figure; off on the staff calendar. */
+  showSummary?: boolean;
 }) {
   const { t, locale } = await getI18n();
   const { range, isWeek, anchor, weekAnchor, month, days } = cal;
@@ -183,6 +186,7 @@ export async function RangeCalendar({
           </h2>
         </div>
 
+        {showSummary ? (
         <p className="text-xs text-ink-muted" data-month-summary>
           <span className="tabular-nums">{inRange.length}</span>
           {inRange.length === 1 ? t(" appointment") : t(" appointments")}
@@ -196,6 +200,7 @@ export async function RangeCalendar({
             </>
           ) : null}
         </p>
+        ) : null}
       </div>
 
       {beforeGrid}

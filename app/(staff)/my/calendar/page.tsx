@@ -98,6 +98,8 @@ export default async function StaffCalendarPage({
         entries={entries}
         staff={[self]}
         detailHrefBase="/my/appointments"
+        // The range count and total are the owner's figure, not shown to staff.
+        showSummary={false}
         // The morning confirmation lives here too, now that this is where a
         // staff member lands — otherwise nobody would open Today to give it.
         beforeGrid={
