@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { getStaffAgenda, businessToday, singleDay, getStaffColourRanks } from "@/lib/agenda/queries";
 import { RangeCalendar, resolveCalendar, toMonthEntries } from "@/components/dashboard/RangeCalendar";
@@ -7,6 +6,7 @@ import { AcknowledgeToday } from "@/components/agenda/AcknowledgeToday";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { createClient } from "@/lib/supabase/serverClient";
 import { getI18n } from "@/lib/i18n/server";
+import { QuickAddButton } from "@/components/quick-add/QuickAddButton";
 
 export const metadata = { title: "Calendar — Mr Clean & Clean Ops" };
 
@@ -84,12 +84,11 @@ export default async function StaffCalendarPage({
     <div className="space-y-4" data-wide>
       <div className="flex flex-wrap items-start justify-between gap-3">
         {heading}
-        <Link
-          href="/my/appointments/new?return=mycalendar"
-          className="rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
-        >
-          {t("+ New")}
-        </Link>
+        {/* Opens Quick Add (paste the message), same as the floating button. */}
+        <QuickAddButton
+          label={t("+ New")}
+          className="cursor-pointer rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+        />
       </div>
 
       <RangeCalendar

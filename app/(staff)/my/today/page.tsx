@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getSessionContext } from "@/lib/auth/session";
 import { getStaffAgenda, businessToday, singleDay } from "@/lib/agenda/queries";
 import { AgendaList } from "@/components/agenda/AgendaList";
@@ -8,6 +7,7 @@ import { AcknowledgeToday } from "@/components/agenda/AcknowledgeToday";
 import { createClient } from "@/lib/supabase/serverClient";
 import { formatDateHeading } from "@/components/agenda/AgendaList";
 import { getI18n } from "@/lib/i18n/server";
+import { QuickAddButton } from "@/components/quick-add/QuickAddButton";
 
 export const metadata = { title: "Today — Mr Clean & Clean Ops" };
 
@@ -41,12 +41,11 @@ export default async function TodayPage() {
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">{t("Today")}</h1>
           <p className="text-sm text-slate-500">{formatDateHeading(today, locale)}</p>
         </div>
-        <Link
-          href="/my/appointments/new?return=today"
-          className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
-        >
-          {t("+ New")}
-        </Link>
+        {/* Opens Quick Add (paste the message), same as the floating button. */}
+        <QuickAddButton
+          label={t("+ New")}
+          className="cursor-pointer rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+        />
       </div>
 
       {/* Above the list, because it is the thing to do before leaving, and
