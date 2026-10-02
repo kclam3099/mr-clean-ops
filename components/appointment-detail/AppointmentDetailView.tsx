@@ -93,6 +93,12 @@ export function AppointmentDetailView({
             { status: statusText(detail.status, lang, t) },
           )}
         </p>
+      ) : capabilities.staffLocked ? (
+        <p data-staff-locked className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
+          {t(capabilities.canComplete
+            ? "This appointment is more than 3 days old. You can view it and mark it completed, but it can no longer be edited."
+            : "This appointment is more than 3 days old. You can view it, but it can no longer be edited.")}
+        </p>
       ) : null}
 
       <Summary detail={detail} showWorkspace={showWorkspace} />

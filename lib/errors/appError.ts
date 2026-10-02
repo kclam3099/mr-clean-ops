@@ -30,6 +30,7 @@ export const AppErrorCode = {
   NOT_AUTHORIZED: "NOT_AUTHORIZED",
   INVALID_APPOINTMENT_STATE: "INVALID_APPOINTMENT_STATE",
   VALIDATION_ERROR: "VALIDATION_ERROR",
+  EDIT_WINDOW_CLOSED: "EDIT_WINDOW_CLOSED",
   LEAVE_OVERLAP: "LEAVE_OVERLAP",
   LEAVE_ALREADY_DECIDED: "LEAVE_ALREADY_DECIDED",
   UNEXPECTED: "UNEXPECTED",
@@ -76,6 +77,7 @@ const MESSAGES: Record<AppErrorCode, string> = {
   INVALID_APPOINTMENT_STATE:
     "This appointment can no longer be changed because it is completed or cancelled.",
   VALIDATION_ERROR: "Please check the details and try again.",
+  EDIT_WINDOW_CLOSED: "Appointments more than 3 days old can no longer be edited.",
   LEAVE_OVERLAP: "You already have a leave request covering those dates.",
   LEAVE_ALREADY_DECIDED: "This leave request has already been decided.",
   UNEXPECTED: "Something went wrong. Please try again.",
@@ -129,6 +131,9 @@ const RULES: Array<{
   // The past-datetime guard from 0007. Worth its own code: "please check the
   // details" is useless when the real problem is that the time has gone.
   { code: AppErrorCode.PAST_DATETIME, test: /^Appointment must be in the future\b|^Leave must start today or later\b/i },
+
+  // Staff edit window (0015).
+  { code: AppErrorCode.EDIT_WINDOW_CLOSED, test: /^Appointments older than 3 days can no longer be edited\b/i },
 
   // Leave requests (0014).
   { code: AppErrorCode.LEAVE_OVERLAP, test: /^A leave request already covers those dates\b/i },

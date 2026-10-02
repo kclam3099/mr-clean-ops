@@ -39,6 +39,8 @@ export type MonthEntry = {
   staffColourIndex: number;
   totalAmount: number | null;
   isLargeJob: boolean;
+  /** Where the job is. Only the staff calendar sends it, in place of money. */
+  areaCity?: string | null;
 };
 
 /** A person on the roster, so a day can say "no appointment" for them. */
@@ -74,6 +76,7 @@ export function MonthOverview({
   entries,
   staff = [],
   detailHrefBase,
+  showAmounts = true,
 }: {
   /** Active month as "YYYY-MM". Days outside it are shown, de-emphasised. */
   month: string;
@@ -85,6 +88,11 @@ export function MonthOverview({
   staff?: MonthStaff[];
   /** Detail links are built here because a function cannot cross to a client. */
   detailHrefBase: string;
+  /**
+   * Day totals and per-job prices. Off on the staff calendar, which shows each
+   * job's area instead — where to go, not what it is worth.
+   */
+  showAmounts?: boolean;
 }) {
   // Seven dates is a week, forty-two is a month. Derived rather than passed,
   // so the two cannot disagree about which one is being drawn.
@@ -185,7 +193,7 @@ export function MonthOverview({
                   >
                     {dayNumber(date)}
                   </span>
-                  {list.length > 0 ? (
+                  {showAmounts && list.length > 0 ? (
                     <span
                       data-day-total={date}
                       title={list.length === 1
@@ -294,7 +302,7 @@ export function MonthOverview({
                   aria-label={`${count === 1
                     ? t("{date}, {count} appointment", { date: longDay(date, locale), count })
                     : t("{date}, {count} appointments", { date: longDay(date, locale), count })}${
-                    count > 0 ? t(", {amount} booked", { amount: compactMoney(dayTotal(date)) }) : ""}`}
+                    showAmounts && count > 0 ? t(", {amount} booked", { amount: compactMoney(dayTotal(date)) }) : ""}`}
                   className={`flex min-h-[2.75rem] cursor-pointer flex-col items-center justify-center
                               gap-0.5 border-b border-r border-line/70 py-1 transition
                               last:border-r-0
@@ -314,14 +322,23 @@ export function MonthOverview({
                   {/* The day's booked total, in the box itself — the number a
                       Master scans the week for. Bare digits, no "RM": a phone
                       cell is ~48px and the currency is the same in every one. */}
-                  <span
-                    data-day-total={date}
-                    aria-hidden="true"
-                    className={`h-3 text-[9px] font-semibold leading-3 tabular-nums
-                                ${outside && !isWeek ? "text-ink-faint" : "text-brand"}`}
-                  >
-                    {count > 0 ? shortAmount(dayTotal(date)) : ""}
-                  </span>
+                  {showAmounts ? (
+                    <span
+                      data-day-total={date}
+                      aria-hidden="true"
+                      className={`h-3 text-[9px] font-semibold leading-3 tabular-nums
+                                  ${outside && !isWeek ? "text-ink-faint" : "text-brand"}`}
+                    >
+                      {count > 0 ? shortAmount(dayTotal(date)) : ""}
+                    </span>
+                  ) : (
+                    // No money on the staff calendar: one dot per job instead.
+                    <span className="flex h-3 items-center gap-[2px]" aria-hidden="true">
+                      {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
+                        <span key={i} className="h-1.5 w-1.5 rounded-full bg-brand/70" />
+                      ))}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -332,7 +349,7 @@ export function MonthOverview({
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-ink">
               {longDay(selectedDay, locale)}
-              {selectedEntries.length > 0 ? (
+              {showAmounts && selectedEntries.length > 0 ? (
                 <span data-selected-day-total className="ml-2 font-semibold tabular-nums text-brand">
                   {compactMoney(selectedTotal)}
                 </span>
@@ -379,7 +396,10 @@ export function MonthOverview({
                     </span>
                     {g.entries.length > 0 ? (
                       <span className="ml-auto shrink-0 text-[11px] font-semibold tabular-nums text-ink-muted">
-                        {g.entries.length} · {compactMoney(g.entries.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0))}
+                        {g.entries.length}
+                        {showAmounts
+                          ? ` · ${compactMoney(g.entries.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0))}`
+                          : ""}
                       </span>
                     ) : null}
                   </div>
@@ -491,6 +511,13 @@ function MonthEntryRow({
           <>
             {entry.staffName && !hideStaff ? <span aria-hidden="true">·</span> : null}
             <span className="shrink-0 tabular-nums">{compactMoney(entry.totalAmount)}</span>
+          </>
+        ) : null}
+        {/* The staff calendar sends the area instead of the price. */}
+        {entry.areaCity ? (
+          <>
+            {entry.staffName && !hideStaff ? <span aria-hidden="true">·</span> : null}
+            <span data-entry-area className="truncate">{entry.areaCity}</span>
           </>
         ) : null}
       </span>

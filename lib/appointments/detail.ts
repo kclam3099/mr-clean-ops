@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/serverClient";
 import { staffColourIndexes } from "@/lib/agenda/staff-colour";
 import type { SessionContext } from "@/lib/auth/session";
+import { addDays, businessToday } from "@/lib/agenda/queries";
 
 /**
  * Single-appointment lookup for the detail page.
@@ -208,24 +209,42 @@ export type AppointmentCapabilities = {
   canOverride: boolean;
   /** Record extra work sold on site. Allowed after completion, too. */
   canAddAddon: boolean;
+  /**
+   * A staff member past the 3-day edit window (migration 0015): they can read
+   * the appointment and still mark it completed, nothing else.
+   */
+  staffLocked: boolean;
 };
+
+/**
+ * Mirrors public.staff_edit_window_open: editable through three days after the
+ * appointment date (business-local), locked from the fourth.
+ */
+export function staffEditWindowOpen(apptDate: string): boolean {
+  return apptDate >= addDays(businessToday(), -3);
+}
 
 export function capabilitiesFor(
   session: SessionContext,
   detail: AppointmentDetail,
   staffCanMarkCompleted: boolean,
 ): AppointmentCapabilities {
+  const isMaster = session.isMaster;
+  // The database refuses these too (trg_enforce_staff_edit_window); hiding the
+  // controls just avoids offering something that will be refused.
+  const staffLocked = !isMaster && !staffEditWindowOpen(detail.date);
   // Terminal appointments are history. The RPCs enforce this too
   // ("Only a booked appointment can be ..."), but offering the controls and
   // then refusing them would be pointless.
   const mutable = detail.status === "booked";
-  const isMaster = session.isMaster;
+  const editable = mutable && !staffLocked;
 
   return {
-    canEditCustomer: mutable,
-    canEditItems: mutable,
-    canReschedule: mutable,
-    canCancel: mutable,
+    staffLocked,
+    canEditCustomer: editable,
+    canEditItems: editable,
+    canReschedule: editable,
+    canCancel: editable,
     // Staff completion is gated by a company setting that only the server can
     // see; 0009 surfaces it so this decision is real rather than assumed.
     canComplete: mutable && (isMaster || staffCanMarkCompleted),
@@ -234,6 +253,7 @@ export function capabilitiesFor(
     // end of the job, so a completed appointment still takes one. Cancelled
     // work earned nothing, and an unassigned job has nobody to credit.
     canAddAddon:
+      !staffLocked &&
       detail.addonsAvailable &&
       detail.status !== "cancelled" &&
       detail.staffId !== null &&

@@ -75,6 +75,7 @@ export async function RangeCalendar({
   detailHrefBase,
   beforeGrid,
   showSummary = true,
+  showAmounts = true,
 }: {
   cal: ResolvedCalendar;
   today: string;
@@ -89,6 +90,8 @@ export async function RangeCalendar({
   beforeGrid?: React.ReactNode;
   /** The range's count and total. A Master's figure; off on the staff calendar. */
   showSummary?: boolean;
+  /** Day totals and job prices in the grid; off on the staff calendar. */
+  showAmounts?: boolean;
 }) {
   const { t, locale } = await getI18n();
   const { range, isWeek, anchor, weekAnchor, month, days } = cal;
@@ -215,6 +218,7 @@ export async function RangeCalendar({
         entries={entries}
         staff={staff}
         detailHrefBase={detailHrefBase}
+        showAmounts={showAmounts}
       />
     </>
   );

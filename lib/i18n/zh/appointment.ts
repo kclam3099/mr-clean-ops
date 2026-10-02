@@ -1,5 +1,10 @@
 /** Simplified Chinese for the appointment area. Key = the exact English source text. */
 export const appointment: Record<string, string> = {
+  "Appointments more than 3 days old can no longer be edited.": "超过 3 天的预约不能再修改。",
+  "This appointment is more than 3 days old. You can view it and mark it completed, but it can no longer be edited.":
+    "这个预约已超过 3 天。你可以查看并标记完成，但不能再修改。",
+  "This appointment is more than 3 days old. You can view it, but it can no longer be edited.":
+    "这个预约已超过 3 天。你可以查看，但不能再修改。",
   // --- appointment detail: header, status, history notice
   "Booked": "已预约",
   "Completed": "已完成",

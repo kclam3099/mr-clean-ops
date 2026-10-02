@@ -69,7 +69,13 @@ export default async function StaffCalendarPage({
     );
   }
 
-  const entries = toMonthEntries(result.appointments);
+  // No money reaches a staff member's calendar at all — not hidden, absent from
+  // the payload. Each job carries its area instead: where to go next.
+  const entries = toMonthEntries(result.appointments).map((e, i) => ({
+    ...e,
+    totalAmount: null,
+    areaCity: result.appointments[i]?.areaCity ?? null,
+  }));
   const self = {
     id: staffId,
     // The staff display name, as every other surface shows it; the account
@@ -100,6 +106,7 @@ export default async function StaffCalendarPage({
         detailHrefBase="/my/appointments"
         // The range count and total are the owner's figure, not shown to staff.
         showSummary={false}
+        showAmounts={false}
         // The morning confirmation lives here too, now that this is where a
         // staff member lands — otherwise nobody would open Today to give it.
         beforeGrid={
