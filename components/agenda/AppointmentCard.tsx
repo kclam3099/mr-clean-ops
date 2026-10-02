@@ -1,6 +1,11 @@
 import Link from "next/link";
 import type { AgendaAppointment } from "@/lib/agenda/queries";
 import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-links";
+import { staffColour, staffInitials } from "@/lib/agenda/staff-colour";
+import {
+  WhatsAppIcon, PhoneIcon, MapPinIcon, ClockIcon, MoneyIcon, StarIcon,
+  CheckIcon, BanIcon,
+} from "@/components/ui/icons";
 
 /**
  * The shared appointment card, used by both the Master calendar and the Staff
@@ -8,9 +13,13 @@ import { mapsHref, whatsappHref, buildReminderMessage } from "@/lib/external-lin
  *
  * Field exposure is driven by props rather than by the data: RLS decides which
  * ROWS arrive, and these flags decide which FIELDS of an arriving row are
- * rendered for this surface. Slots for the Maps and WhatsApp actions are
- * present and wired for Maps; WhatsApp is a deep link only and lands with the
- * reminder step.
+ * rendered for this surface.
+ *
+ * The time is the anchor. It used to be small mono text in the corner, which
+ * meant the first thing the eye found on a day of work was a column of customer
+ * names and the question "when" took a second pass. It now sits in its own
+ * block down the left, at the largest size on the card, because the question
+ * someone opens this screen to answer is what time they have to be somewhere.
  *
  * Two densities. `compact` is for the seven-column week grid, where a column is
  * roughly 170px: it drops the action buttons and the address so the customer
@@ -40,108 +49,157 @@ export function AppointmentCard({
     a.customerPhone,
     buildReminderMessage({ customerName: a.customerName, date: a.date, startTime: a.startTime }),
   );
+  const colour = staffColour(a.staffId ?? null);
+  const cancelled = a.status === "cancelled";
 
   return (
     <article
-      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${compact ? "p-3" : "p-4"}`}
+      className={`overflow-hidden rounded-xl border border-l-4 border-line bg-card shadow-sm
+                  transition-shadow duration-200 hover:shadow-md
+                  ${colour.border} ${cancelled ? "opacity-70" : ""}`}
     >
       <CardLink href={detailHref}>
-      <div className="flex items-start justify-between gap-2">
-        {/* tabular-nums + nowrap so a time range never breaks across lines */}
-        <p
-          className={`whitespace-nowrap font-mono font-medium tabular-nums text-slate-900 ${
-            compact ? "text-xs" : "text-sm"
-          }`}
-        >
-          {a.startTime}–{a.endTime}
-        </p>
-        <StatusBadge status={a.status} compact={compact} />
-      </div>
-
-      {/* Wraps to two lines rather than truncating: the customer name is the
-          single most useful field on the card and must stay readable in a
-          narrow week column. */}
-      <h3
-        className={`mt-1 line-clamp-2 font-medium leading-snug break-words text-slate-900 ${
-          compact ? "text-sm" : "text-base"
-        }`}
-      >
-        {a.customerName}
-      </h3>
-
-      {a.isLargeJob ? (
-        <span className="mt-1.5 inline-block rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
-          Large job
-        </span>
-      ) : null}
-
-      {!compact && (a.addressLine || a.areaCity) ? (
-        <p className="mt-2 text-sm text-slate-600">
-          {[a.addressLine, a.areaCity].filter(Boolean).join(", ")}
-        </p>
-      ) : null}
-      {compact && a.areaCity ? (
-        <p className="mt-1 truncate text-xs text-slate-500">{a.areaCity}</p>
-      ) : null}
-
-      <div
-        className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-500 ${
-          compact ? "mt-1.5 text-xs" : "mt-3 text-sm"
-        }`}
-      >
-        {showAmount && a.totalAmount !== null ? (
-          <span className="font-medium text-slate-700">RM{a.totalAmount.toFixed(2)}</span>
-        ) : null}
-        <span>{a.durationMin} min</span>
-      </div>
-
-      {(showStaff && a.staffName) || (showWorkspace && a.workspaceName) ? (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {showStaff && a.staffName ? (
-            <span className="text-xs font-medium text-slate-600">{a.staffName}</span>
-          ) : null}
-          {showWorkspace && a.workspaceName ? (
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-              {a.workspaceName}
+        <div className={`flex gap-3 ${compact ? "p-2.5" : "p-3.5"}`}>
+          {/* ---- the time block: the reason this screen is open ---- */}
+          <div
+            className={`flex shrink-0 flex-col items-center justify-center rounded-lg
+                        ${colour.bg} ${compact ? "min-w-14 px-1.5 py-1" : "min-w-16 px-2 py-1.5"}`}
+          >
+            <span
+              className={`font-bold leading-none tabular-nums ${colour.text}
+                          ${compact ? "text-sm" : "text-lg"}`}
+            >
+              {a.startTime}
             </span>
-          ) : null}
+            <span
+              className={`mt-0.5 leading-none tabular-nums text-ink-faint
+                          ${compact ? "text-[9px]" : "text-[10px]"}`}
+            >
+              {a.endTime}
+            </span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              {/* Wraps rather than truncating: the customer name is the single
+                  most useful field and must stay readable in a narrow column. */}
+              <h3
+                className={`line-clamp-2 font-semibold leading-snug break-words text-ink
+                            ${compact ? "text-sm" : "text-base"}
+                            ${cancelled ? "line-through decoration-ink-faint" : ""}`}
+              >
+                {a.customerName}
+              </h3>
+              <StatusBadge status={a.status} compact={compact} />
+            </div>
+
+            {/* ---- the facts line: duration, money, large job ---- */}
+            <div
+              className={`mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1
+                          ${compact ? "text-[11px]" : "text-xs"}`}
+            >
+              <span className="flex items-center gap-1 text-ink-muted">
+                <ClockIcon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+                {a.durationMin}m
+              </span>
+              {showAmount && a.totalAmount !== null ? (
+                <span className="flex items-center gap-1 font-semibold text-ink">
+                  <MoneyIcon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
+                  RM{a.totalAmount.toFixed(2)}
+                </span>
+              ) : null}
+              {a.isLargeJob ? (
+                <span className="flex items-center gap-1 rounded-full bg-amber/20 px-1.5 py-0.5 font-semibold text-warn">
+                  <StarIcon className="h-3 w-3" />
+                  Large
+                </span>
+              ) : null}
+            </div>
+
+            {/* ---- where ---- */}
+            {!compact && (a.addressLine || a.areaCity) ? (
+              <p className="mt-1.5 flex items-start gap-1 text-sm text-ink-muted">
+                <MapPinIcon className="mt-0.5 h-3.5 w-3.5 text-ink-faint" />
+                <span className="min-w-0">{[a.addressLine, a.areaCity].filter(Boolean).join(", ")}</span>
+              </p>
+            ) : null}
+            {compact && a.areaCity ? (
+              <p className="mt-1 flex items-center gap-1 truncate text-[11px] text-ink-faint">
+                <MapPinIcon className="h-3 w-3" />
+                {a.areaCity}
+              </p>
+            ) : null}
+
+            {/* ---- who ---- */}
+            {(showStaff && a.staffName) || (showWorkspace && a.workspaceName) ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                {showStaff && a.staffName ? (
+                  <span
+                    className={`flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-2
+                                text-[11px] font-semibold ${colour.bg} ${colour.text}`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded-full
+                                  text-[8px] font-bold text-white ${colour.solid}`}
+                    >
+                      {staffInitials(a.staffName)}
+                    </span>
+                    {a.staffName}
+                  </span>
+                ) : null}
+                {showWorkspace && a.workspaceName ? (
+                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-muted">
+                    {a.workspaceName}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
-      ) : null}
       </CardLink>
 
-      {!compact ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {maps ? (
+      {/* ---- actions, outside the link so a tap on one does not navigate ---- */}
+      {!compact && (maps || a.customerPhone || whatsapp) ? (
+        <div className="flex gap-1.5 border-t border-line bg-sunken/50 px-3.5 py-2">
+          {whatsapp ? (
+            // Branded on purpose: the glyph and the green are how someone knows
+            // which app is about to open before they tap. Deep link only — it
+            // opens WhatsApp with the message prefilled and is never sent
+            // automatically; the user reviews and presses send.
             <a
-              href={maps}
+              href={whatsapp}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700
-                         transition hover:bg-slate-50"
+              className="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5
+                         rounded-lg bg-[#25D366] px-2.5 text-xs font-semibold text-white
+                         transition-colors duration-200 hover:bg-[#1da851]"
             >
-              Directions
+              <WhatsAppIcon className="h-4 w-4" />
+              WhatsApp
             </a>
           ) : null}
           {a.customerPhone ? (
             <a
               href={`tel:${a.customerPhone}`}
-              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700
-                         transition hover:bg-slate-50"
+              className="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5
+                         rounded-lg border border-line bg-card px-2.5 text-xs font-semibold
+                         text-ink transition-colors duration-200 hover:bg-sunken"
             >
+              <PhoneIcon className="h-3.5 w-3.5 text-ok" />
               Call
             </a>
           ) : null}
-          {/* Deep link only — opens WhatsApp with the message prefilled. It is
-              never sent automatically; the user reviews and presses send. */}
-          {whatsapp ? (
+          {maps ? (
             <a
-              href={whatsapp}
+              href={maps}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700
-                         transition hover:bg-slate-50"
+              className="flex min-h-9 flex-1 cursor-pointer items-center justify-center gap-1.5
+                         rounded-lg border border-line bg-card px-2.5 text-xs font-semibold
+                         text-ink transition-colors duration-200 hover:bg-sunken"
             >
-              WhatsApp
+              <MapPinIcon className="h-3.5 w-3.5 text-danger" />
+              Directions
             </a>
           ) : null}
         </div>
@@ -158,7 +216,11 @@ export function AppointmentCard({
 function CardLink({ href, children }: { href?: string; children: React.ReactNode }) {
   if (!href) return <>{children}</>;
   return (
-    <Link href={href} className="block rounded-lg outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-900">
+    <Link
+      href={href}
+      className="block outline-offset-2 focus-visible:outline focus-visible:outline-2
+                 focus-visible:outline-brand-blue"
+    >
       {children}
     </Link>
   );
@@ -171,36 +233,37 @@ function StatusBadge({
   status: AgendaAppointment["status"];
   compact: boolean;
 }) {
-  const styles: Record<AgendaAppointment["status"], string> = {
-    booked: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
-    cancelled: "bg-slate-100 text-slate-600",
+  const styles: Record<AgendaAppointment["status"], { chip: string; label: string }> = {
+    booked: { chip: "bg-brand/10 text-brand", label: "Booked" },
+    completed: { chip: "bg-ok/15 text-ok", label: "Done" },
+    cancelled: { chip: "bg-sunken text-ink-muted", label: "Cancelled" },
   };
+  const s = styles[status];
+
   if (compact) {
     // Colour PLUS a glyph. A coloured dot alone reads identically to anyone who
-    // cannot distinguish the hues, and this badge is the only status signal on
-    // the week grid — the shape has to carry the meaning on its own.
-    const marks: Record<AgendaAppointment["status"], { glyph: string; className: string }> = {
-      booked: { glyph: "●", className: "bg-blue-100 text-blue-800" },
-      completed: { glyph: "✓", className: "bg-green-100 text-green-800" },
-      cancelled: { glyph: "✕", className: "bg-slate-100 text-slate-600" },
-    };
-    const mark = marks[status];
+    // cannot separate those hues, and this is the field that says whether the
+    // job is still happening.
+    const glyph =
+      status === "completed" ? <CheckIcon className="h-3 w-3" />
+      : status === "cancelled" ? <BanIcon className="h-3 w-3" />
+      : <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />;
     return (
       <span
-        className={`shrink-0 rounded px-1 text-[10px] font-semibold leading-4 ${mark.className}`}
-        title={status}
+        title={s.label}
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${s.chip}`}
       >
-        <span aria-hidden="true">{mark.glyph}</span>
-        <span className="sr-only">{status}</span>
+        {glyph}
+        <span className="sr-only">{s.label}</span>
       </span>
     );
   }
+
   return (
     <span
-      className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${styles[status]}`}
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.chip}`}
     >
-      {status}
+      {s.label}
     </span>
   );
 }
