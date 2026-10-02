@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import type { SessionContext } from "@/lib/auth/session";
 import { scopeOptions, type WorkspaceScope } from "@/lib/workspace/scope";
 import { WorkspaceScopeSelector } from "./WorkspaceScopeSelector";
-import { SignOutButton } from "./SignOutButton";
+import { AccountMenu } from "./AccountMenu";
 import { ScopedNavLinks } from "./ScopedNavLinks";
 
 /**
@@ -77,11 +77,8 @@ export function MasterNav({
             </span>
           )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <span className="hidden max-w-40 truncate text-sm text-white/75 md:inline">
-              {session.fullName}
-            </span>
-            <SignOutButton />
+          <div className="ml-auto shrink-0">
+            <AccountMenu name={session.fullName} />
           </div>
         </div>
 

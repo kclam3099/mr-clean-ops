@@ -37,7 +37,7 @@ const rec = createRecorder("DASHBOARD MONTH + SCOPE (browser)");
 // with fifteen checks never executed, because a fixture threw and the summary
 // only described what had run. Adding or removing a check means updating this
 // number — deliberately, in the same diff.
-rec.plan(58);
+rec.plan(63);
 
 
 const KC_ONLY = [
@@ -100,7 +100,7 @@ try {
     const ctx = await browser.newContext({ viewport });
     const page = await ctx.newPage();
     await page.goto(`${BASE}/login`, { waitUntil: "load" });
-    await page.fill("input[name=email]", email);
+    await page.fill("input[name=username]", email);
     await page.fill("input[name=password]", PASSWORD);
     await page.click("button[type=submit]");
     await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
@@ -754,13 +754,99 @@ try {
 
     await ctx.close();
   }
+  if (browser) await browser.close();
+  // ---- the morning staff-status panel (0012) -----------------------------
+  //
+  // The data layer is covered by the backend suite. What is only observable
+  // here is whether the panel RENDERS the right people, with the right state,
+  // for the right viewer — and in particular that Nick's copy of the page has
+  // no Victor row in it at any width.
+  {
+    const readPanel = async (page) => page.evaluate(() => {
+      const panel = document.querySelector("[data-staff-status]");
+      if (!panel) return null;
+      return {
+        rows: [...panel.querySelectorAll("[data-staff-status-row]")].map((li) => ({
+          name: li.getAttribute("data-staff-status-row"),
+          state: li.getAttribute("data-state"),
+          // The words, not the colour: the panel must not rely on the dot.
+          text: (li.textContent || "").replace(/\s+/g, " ").trim(),
+        })),
+        html: panel.outerHTML,
+      };
+    });
+
+    const kcSession = await session(ids.email.kc);
+    await kcSession.page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+    await settle(kcSession.page);
+    const kcPanel = await readPanel(kcSession.page);
+
+    rec.check({
+      id: "DB-59 the morning panel renders for a Master", actor: "KC",
+      action: "look for the staff status panel on /dashboard",
+      expected: "present, one row per visible staff member",
+      actual: kcPanel ? `${kcPanel.rows.length} row(s): ${kcPanel.rows.map((r) => r.name).join(", ")}` : "ABSENT",
+      ok: Boolean(kcPanel) && kcPanel.rows.length === 3,
+    });
+
+    rec.check({
+      id: "DB-60 every row states its state in words, not only in colour", actor: "KC",
+      action: "read each row's text",
+      expected: "each says Ready, Not yet or No jobs",
+      actual: (kcPanel?.rows ?? []).map((r) => `${r.name}:${/Ready|Not yet|No jobs/.test(r.text) ? "ok" : "NO LABEL"}`).join(" "),
+      ok: Boolean(kcPanel) && kcPanel.rows.every((r) => /Ready|Not yet|No jobs/.test(r.text)),
+    });
+
+    rec.check({
+      id: "DB-61 a Super Master sees every workspace's staff", actor: "KC",
+      action: "look for Victor in the panel",
+      expected: "present",
+      actual: (kcPanel?.rows ?? []).some((r) => r.name === "TEST_VICTOR") ? "present" : "ABSENT",
+      ok: (kcPanel?.rows ?? []).some((r) => r.name === "TEST_VICTOR"),
+    });
+    await kcSession.ctx.close();
+
+    // Nick, at both layouts, because the panel renders once but the page does
+    // not — a breakpoint that duplicated it could duplicate a leak with it.
+    for (const width of [390, 1440]) {
+      const nick = await session(ids.email.nick, { width, height: 900 });
+      await nick.page.goto(`${BASE}/dashboard`, { waitUntil: "load" });
+      await settle(nick.page);
+      const panel = await readPanel(nick.page);
+
+      rec.check({
+        id: `DB-62 ${width}px a Partner Master sees only their own staff`, actor: "NICK",
+        setup: `${width}px`, action: "read the panel rows",
+        expected: "Jack and Dyron",
+        actual: panel ? panel.rows.map((r) => r.name).join(", ") : "ABSENT",
+        ok: Boolean(panel) && panel.rows.length === 2
+          && panel.rows.some((r) => r.name === "TEST_JACK")
+          && panel.rows.some((r) => r.name === "TEST_DYRON"),
+      });
+
+      rec.check({
+        id: `DB-63 ${width}px Victor never appears in Nick's panel (CRITICAL)`, actor: "NICK",
+        setup: `${width}px`, action: "search the panel markup for Victor",
+        expected: "absent from rows AND from the rendered HTML",
+        actual: (panel?.rows ?? []).some((r) => r.name === "TEST_VICTOR")
+          ? "ROW PRESENT"
+          : /TEST_VICTOR/.test(panel?.html ?? "") ? "IN MARKUP" : "absent",
+        ok: Boolean(panel)
+          && !panel.rows.some((r) => r.name === "TEST_VICTOR")
+          && !/TEST_VICTOR/.test(panel.html),
+        security: true,
+      });
+
+      await nick.ctx.close();
+    }
+  }
+
 } catch (e) {
   // An exception that escapes the body must not vanish into a green summary.
   // Recorded here, so cleanup still runs and the verdict still prints — but the
   // run is no longer a pass. See tests/unit/harness-accounting.test.mjs.
   rec.aborted(e);
 } finally {
-  if (browser) await browser.close();
   // Take ownership of rows that APPEARED while this suite ran, then delete by
   // exact id. A manual booking matching the same pattern existed at baseline
   // and is therefore never adopted, never touched.

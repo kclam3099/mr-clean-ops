@@ -114,12 +114,12 @@ export function MonthOverview({
   return (
     <div ref={gridRef} data-month-grid={month}>
       {/* ---------------- desktop: the month grid ---------------- */}
-      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white lg:block">
-        <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+      <div className="hidden overflow-hidden rounded-2xl border border-line bg-card shadow-sm lg:block">
+        <div className="grid grid-cols-7 border-b border-line bg-brand">
           {WEEKDAYS.map((w) => (
             <div
               key={w}
-              className="px-2 py-1.5 text-center text-[10px] font-semibold tracking-widest text-slate-500"
+              className="px-2 py-2 text-center text-[10px] font-bold tracking-widest text-white/80"
             >
               {w}
             </div>
@@ -137,18 +137,19 @@ export function MonthOverview({
                 key={date}
                 data-day-cell={date}
                 data-outside-month={outside ? "true" : undefined}
-                className={`group relative min-h-[7.5rem] border-b border-r border-slate-100 p-1.5
+                className={`group relative min-h-[7.5rem] border-b border-r border-line/70 p-1.5
                             ${i % 7 === 6 ? "border-r-0" : ""}
                             ${i >= 35 ? "border-b-0" : ""}
-                            ${outside ? "bg-slate-50/60" : ""}`}
+                            ${outside ? "bg-sunken/60" : ""}
+                            ${isToday ? "bg-amber/15 ring-2 ring-inset ring-gold" : ""}`}
               >
                 <div className="mb-1 flex items-center justify-between">
                   <span
                     data-today={isToday ? "true" : undefined}
                     className={
                       isToday
-                        ? "flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1 text-[11px] font-semibold text-white"
-                        : `px-0.5 text-[11px] font-medium ${outside ? "text-slate-400" : "text-slate-600"}`
+                        ? "flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-1.5 text-[12px] font-bold text-white"
+                        : `px-0.5 text-[11px] font-semibold ${outside ? "text-ink-faint" : "text-ink"}`
                     }
                   >
                     {dayNumber(date)}
@@ -159,8 +160,8 @@ export function MonthOverview({
                     data-add-on={date}
                     onClick={() => openQuickAdd(date)}
                     aria-label={`New appointment on ${longDay(date)}`}
-                    className="rounded text-[13px] leading-none text-slate-400 opacity-0 transition
-                               hover:bg-slate-100 hover:text-slate-700 focus-visible:opacity-100
+                    className="cursor-pointer rounded text-[15px] leading-none text-ink-faint opacity-0
+                               transition hover:bg-brand/10 hover:text-brand focus-visible:opacity-100
                                group-hover:opacity-100"
                   >
                     <span aria-hidden="true" className="px-1">+</span>
@@ -180,7 +181,7 @@ export function MonthOverview({
                     onClick={() => setOpenDay(openDay === date ? null : date)}
                     aria-expanded={openDay === date}
                     className="mt-0.5 w-full rounded px-1 py-0.5 text-left text-[10px] font-medium
-                               text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                               text-ink-muted hover:bg-sunken hover:text-brand"
                   >
                     +{hidden} more
                   </button>
@@ -191,16 +192,16 @@ export function MonthOverview({
                     data-day-popover={date}
                     role="dialog"
                     aria-label={`Appointments on ${longDay(date)}`}
-                    className="absolute left-1 right-1 top-8 z-30 rounded-lg border border-slate-200
+                    className="absolute left-1 right-1 top-8 z-30 rounded-lg border border-line
                                bg-white p-2 shadow-xl"
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold text-slate-900">{longDay(date)}</p>
+                      <p className="text-[11px] font-semibold text-ink">{longDay(date)}</p>
                       <button
                         type="button"
                         onClick={() => setOpenDay(null)}
                         aria-label="Close"
-                        className="rounded px-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        className="cursor-pointer rounded px-1 text-xs text-ink-faint hover:bg-sunken hover:text-brand"
                       >
                         ✕
                       </button>
@@ -224,10 +225,10 @@ export function MonthOverview({
           grid keeps its shape and loses its entries, and the day you tap opens
           underneath it. */}
       <div className="lg:hidden">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+        <div className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="grid grid-cols-7 border-b border-line bg-brand">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="py-1 text-center text-[10px] font-semibold text-slate-500">
+              <div key={w} className="py-1.5 text-center text-[10px] font-bold tracking-wider text-white/80">
                 {w.slice(0, 1)}
               </div>
             ))}
@@ -247,16 +248,18 @@ export function MonthOverview({
                   onClick={() => setSelectedDay(date)}
                   aria-pressed={isSelected}
                   aria-label={`${longDay(date)}, ${count} appointment${count === 1 ? "" : "s"}`}
-                  className={`flex min-h-[2.75rem] flex-col items-center justify-center gap-0.5 border-b
-                              border-r border-slate-100 py-1 transition last:border-r-0
-                              ${isSelected ? "bg-slate-900/5 ring-1 ring-inset ring-slate-900" : "hover:bg-slate-50"}`}
+                  className={`flex min-h-[2.75rem] cursor-pointer flex-col items-center justify-center
+                              gap-0.5 border-b border-r border-line/70 py-1 transition
+                              last:border-r-0
+                              ${isToday && !isSelected ? "bg-amber/20" : ""}
+                              ${isSelected ? "bg-brand/10 ring-2 ring-inset ring-brand" : "hover:bg-sunken"}`}
                 >
                   <span
                     data-today={isToday ? "true" : undefined}
                     className={
                       isToday
-                        ? "flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1 text-[11px] font-semibold text-white"
-                        : `text-[11px] font-medium ${outside ? "text-slate-400" : "text-slate-700"}`
+                        ? "flex h-6 min-w-6 items-center justify-center rounded-full bg-brand px-1 text-[12px] font-bold text-white"
+                        : `text-[11px] font-semibold ${outside ? "text-ink-faint" : "text-ink"}`
                     }
                   >
                     {dayNumber(date)}
@@ -265,7 +268,7 @@ export function MonthOverview({
                       do not compete with the date. */}
                   <span className="flex h-1 items-center gap-[2px]" aria-hidden="true">
                     {Array.from({ length: Math.min(count, 3) }).map((_, i) => (
-                      <span key={i} className="h-1 w-1 rounded-full bg-slate-400" />
+                      <span key={i} className="h-1 w-1 rounded-full bg-brand/60" />
                     ))}
                   </span>
                 </button>
@@ -276,7 +279,7 @@ export function MonthOverview({
 
         <div className="mt-3" data-day-agenda={selectedDay}>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">{longDay(selectedDay)}</h2>
+            <h2 className="text-sm font-semibold text-ink">{longDay(selectedDay)}</h2>
             <button
               type="button"
               data-add-on={selectedDay}
@@ -284,8 +287,8 @@ export function MonthOverview({
               /* min-h-8: a 24px control is a miss on a phone. The desktop grid's
                  + is a hover affordance beside a large cell; this one is the
                  only way to add from the agenda, so it gets a real tap target. */
-              className="flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-3
-                         text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+              className="flex min-h-8 items-center rounded-lg border border-line bg-white px-3
+                         text-xs font-medium text-ink transition hover:bg-sunken"
             >
               + New appointment
             </button>
@@ -293,8 +296,8 @@ export function MonthOverview({
           {selectedEntries.length === 0 ? (
             // Says nothing about availability: hidden work and physical
             // conflicts are invisible here by design, so "free" would be a lie.
-            <p className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center
-                          text-xs text-slate-400">
+            <p className="rounded-lg border border-dashed border-line px-3 py-6 text-center
+                          text-xs text-ink-faint">
               Nothing scheduled.
             </p>
           ) : (
@@ -328,13 +331,13 @@ function MonthEntryRow({
     <Link
       href={href}
       data-appointment-row={entry.id}
-      className={`block rounded border-l-2 border-slate-300 bg-slate-50 transition
-                  hover:border-slate-900 hover:bg-slate-100
+      className={`block cursor-pointer rounded border-l-2 border-brand/40 bg-sunken transition
+                  hover:border-brand hover:bg-brand/10
                   ${roomy ? "px-2 py-1.5 text-xs" : "px-1 py-0.5 text-[11px]"}`}
     >
       <span className="flex items-baseline gap-1">
-        <span className="shrink-0 font-semibold tabular-nums text-slate-900">{entry.startTime}</span>
-        <span className="truncate text-slate-900">{entry.customerName}</span>
+        <span className="shrink-0 font-semibold tabular-nums text-ink">{entry.startTime}</span>
+        <span className="truncate text-ink">{entry.customerName}</span>
         {/* The badge sits on the TIME line, where there is nearly always slack.
             On the staff line it stole width from the staff name, which is the
             one thing on an entry that must stay readable — "TEST_JA…" tells
@@ -349,7 +352,7 @@ function MonthEntryRow({
           </span>
         ) : null}
       </span>
-      <span className="flex items-center gap-[3px] truncate text-slate-500">
+      <span className="flex items-center gap-[3px] truncate text-ink-muted">
         {/* Staff is TEXT, never colour alone — colour is not readable to
             everyone and does not survive a screenshot pasted into WhatsApp. */}
         {entry.staffName ? <span className="truncate">{entry.staffName}</span> : null}

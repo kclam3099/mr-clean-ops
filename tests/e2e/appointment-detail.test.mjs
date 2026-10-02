@@ -681,7 +681,7 @@ async function session(email) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/login`, { waitUntil: "load" });
-  await page.fill("input[name=email]", email);
+  await page.fill("input[name=username]", email);
   await page.fill("input[name=password]", PASSWORD);
   await page.click("button[type=submit]");
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });

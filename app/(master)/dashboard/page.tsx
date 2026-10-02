@@ -70,10 +70,10 @@ export default async function DashboardPage({
 
   const heading = (
     <div>
-      <h1 className="text-lg font-semibold tracking-tight text-slate-900">Dashboard</h1>
+      <h1 className="text-lg font-semibold tracking-tight text-ink">Dashboard</h1>
       {/* The subheading names the RESOLVED scope, and the selector in the nav
           reads the same URL parameter, so the two cannot disagree. */}
-      <p className="text-sm text-slate-500" data-scope-label>
+      <p className="text-sm text-ink-muted" data-scope-label>
         {scope.label} · Month overview
       </p>
     </div>
@@ -119,8 +119,8 @@ export default async function DashboardPage({
         {heading}
         <Link
           href={hasChoice ? `/calendar?ws=${encodeURIComponent(scopeValue)}` : "/calendar"}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium
-                     text-slate-700 transition hover:bg-slate-50"
+          className="rounded-lg border border-line bg-card px-3 py-2 text-sm font-medium
+                     text-ink transition hover:bg-sunken"
         >
           Open calendar
         </Link>
@@ -131,8 +131,8 @@ export default async function DashboardPage({
           <Link
             href={monthHref(monthKey(today))}
             data-month-today
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium
-                       text-slate-700 transition hover:bg-slate-50"
+            className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-medium
+                       text-ink transition hover:bg-sunken"
           >
             Today
           </Link>
@@ -140,8 +140,8 @@ export default async function DashboardPage({
             href={monthHref(monthKey(addMonths(anchor, -1)))}
             data-month-prev
             aria-label="Previous month"
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm
-                       text-slate-700 transition hover:bg-slate-50"
+            className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
+                       text-ink transition hover:bg-sunken"
           >
             <span aria-hidden="true">←</span>
           </Link>
@@ -149,17 +149,17 @@ export default async function DashboardPage({
             href={monthHref(monthKey(addMonths(anchor, 1)))}
             data-month-next
             aria-label="Next month"
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm
-                       text-slate-700 transition hover:bg-slate-50"
+            className="rounded-lg border border-line bg-card px-2.5 py-1.5 text-sm
+                       text-ink transition hover:bg-sunken"
           >
             <span aria-hidden="true">→</span>
           </Link>
-          <h2 className="ml-1.5 text-base font-semibold tracking-tight text-slate-900" data-month-label>
+          <h2 className="ml-1.5 text-base font-semibold tracking-tight text-ink" data-month-label>
             {monthLabel(anchor)}
           </h2>
         </div>
 
-        <p className="text-xs text-slate-500" data-month-summary>
+        <p className="text-xs text-ink-muted" data-month-summary>
           <span className="tabular-nums">{inMonth.length}</span>
           {inMonth.length === 1 ? " appointment" : " appointments"}
           {" · "}

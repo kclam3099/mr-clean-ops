@@ -265,7 +265,7 @@ try {
     const kcCtx = await browser.newContext();
     const kcPage = await kcCtx.newPage();
     await kcPage.goto(`${BASE}/login`, { waitUntil: "load" });
-    await kcPage.fill("input[name=email]", ids.email.kc);
+    await kcPage.fill("input[name=username]", ids.email.kc);
     await kcPage.fill("input[name=password]", PASSWORD);
     await kcPage.click("button[type=submit]");
     await kcPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
@@ -277,7 +277,7 @@ try {
     const nickCtx = await browser.newContext();
     const nickPage = await nickCtx.newPage();
     await nickPage.goto(`${BASE}/login`, { waitUntil: "load" });
-    await nickPage.fill("input[name=email]", ids.email.nick);
+    await nickPage.fill("input[name=username]", ids.email.nick);
     await nickPage.fill("input[name=password]", PASSWORD);
     await nickPage.click("button[type=submit]");
     await nickPage.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
@@ -378,12 +378,12 @@ async function login(page, email) {
  * defeat the whole test.
  */
 async function loginInPlace(page, email) {
-  await page.waitForSelector("input[name=email]", { timeout: 20_000 });
+  await page.waitForSelector("input[name=username]", { timeout: 20_000 });
   await submitLogin(page, email);
 }
 
 async function submitLogin(page, email) {
-  await page.fill("input[name=email]", email);
+  await page.fill("input[name=username]", email);
   await page.fill("input[name=password]", PASSWORD);
   await page.click("button[type=submit]");
 }

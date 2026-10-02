@@ -9,7 +9,7 @@
 // connection. A test that asserts RLS while bypassing RLS proves nothing.
 
 import {
-  adminClient, assertTestTarget, resolveIdentities, createFixture, createRecorder,
+  adminClient, assertTestTarget, resolveIdentities, createRecorder,
   signInAll, rpc, rest,
 } from './lib/harness.mjs';
 
@@ -20,7 +20,6 @@ rec.plan(14);
 
 const db = await adminClient();
 const ids = await resolveIdentities(db);
-const fx = createFixture(db);
 
 const today = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit',

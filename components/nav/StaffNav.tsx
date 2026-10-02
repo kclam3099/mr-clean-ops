@@ -1,6 +1,6 @@
 import Image from "next/image";
 import type { SessionContext } from "@/lib/auth/session";
-import { SignOutButton } from "./SignOutButton";
+import { AccountMenu } from "./AccountMenu";
 import { NavLink } from "./NavLink";
 
 /**
@@ -40,7 +40,7 @@ export function StaffNav({ session }: { session: SessionContext }) {
           {session.fullName}
         </span>
         <div className="ml-auto shrink-0">
-          <SignOutButton />
+          <AccountMenu name={session.fullName} />
         </div>
       </div>
       <nav className="flex gap-0.5 px-3 pb-px pt-1">
