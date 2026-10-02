@@ -61,7 +61,7 @@ export default async function DashboardPage({
     ? (params.week as string)
     : range === "next-week" ? addDays(weekStart(today), 7) : today;
 
-  // Exactly the cells the grid draws — six Sunday-anchored weeks — and nothing
+  // Exactly the cells the grid draws — six Monday-anchored weeks — and nothing
   // beyond them. Paging a month forward is a new query for that grid, not a
   // speculative fetch of the rest of the year.
   const isWeek = range !== "month";

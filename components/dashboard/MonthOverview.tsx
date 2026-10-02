@@ -43,7 +43,7 @@ export type MonthEntry = {
 /** How many entries a desktop cell shows before collapsing into "+N more". */
 const VISIBLE_PER_CELL = 3;
 
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
 function dayNumber(iso: string): string {
   return String(Number(iso.slice(8, 10)));
@@ -65,7 +65,7 @@ export function MonthOverview({
 }: {
   /** Active month as "YYYY-MM". Days outside it are shown, de-emphasised. */
   month: string;
-  /** The dates of the grid, in order, Sunday first: 42 for a month, 7 for a week. */
+  /** The dates of the grid, in order, Monday first: 42 for a month, 7 for a week. */
   days: string[];
   today: string;
   entries: MonthEntry[];

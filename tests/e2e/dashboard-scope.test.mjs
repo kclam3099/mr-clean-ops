@@ -229,12 +229,12 @@ try {
     });
 
     rec.check({
-      id: "DB-02 a full Sunday-first grid", actor: "KC", setup: "1440px",
+      id: "DB-02 a full Monday-first grid", actor: "KC", setup: "1440px",
       action: "count day cells and read the weekday header",
-      expected: "42 cells, SUN…SAT",
+      expected: "42 cells, MON…SUN",
       actual: `${m.dayCells} cells, ${m.weekdays.join(" ")}`,
       ok: m.dayCells === 42
-          && m.weekdays.join(",") === "SUN,MON,TUE,WED,THU,FRI,SAT",
+          && m.weekdays.join(",") === "MON,TUE,WED,THU,FRI,SAT,SUN",
     });
 
     rec.check({

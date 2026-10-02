@@ -244,7 +244,7 @@ export function addMonths(isoDate: string, months: number): string {
 }
 
 /**
- * The dates a month CALENDAR shows: six Sunday-anchored weeks containing the
+ * The dates a month CALENDAR shows: six Monday-anchored weeks containing the
  * whole of `isoDate`'s month, leading and trailing days included.
  *
  * Six rows always, even when five would hold the month, so the grid does not
@@ -252,14 +252,16 @@ export function addMonths(isoDate: string, months: number): string {
  * click is harder to read than one with a little empty space at the bottom.
  *
  * This is what the month query asks for, so exactly the visible cells are
- * fetched and nothing beyond them. Deliberately NOT `weekRange`, which is
- * Monday-anchored for the scheduling calendar.
+ * fetched and nothing beyond them.
  */
 export function monthGridRange(isoDate: string): DateRange {
   const [y, m] = isoDate.split("-").map(Number);
   const first = `${y}-${String(m).padStart(2, "0")}-01`;
-  const dow = new Date(Date.UTC(y as number, (m as number) - 1, 1)).getUTCDay(); // 0 = Sunday
-  const from = addDays(first, -dow);
+  // Monday-anchored, like the scheduling calendar and like the business week.
+  // getUTCDay() is 0 for Sunday, so Sunday has to shift back six days rather
+  // than none.
+  const dow = new Date(Date.UTC(y as number, (m as number) - 1, 1)).getUTCDay();
+  const from = addDays(first, -((dow + 6) % 7));
   return { from, to: addDays(from, 41) };
 }
 
@@ -314,29 +316,31 @@ export function groupByDate(items: AgendaAppointment[]): Array<{ date: string; i
 // ---------------------------------------------------------------------------
 
 /**
- * The Sunday that starts the week containing this date.
+ * The Monday that starts the week containing this date.
  *
- * Sunday rather than Monday to match the month grid above. A dashboard whose
- * week starts on a different day from its month would put the same date in a
- * different column depending on which button was last pressed.
+ * Monday because that is the working week, and because the month grid and the
+ * scheduling calendar both anchor there — a dashboard whose week started on a
+ * different day from its month would put the same date in a different column
+ * depending on which button was last pressed.
  */
 export function weekStart(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number);
   const dt = new Date(Date.UTC(y as number, (m as number) - 1, d as number));
-  return addDays(isoDate, -dt.getUTCDay());
+  return addDays(isoDate, -((dt.getUTCDay() + 6) % 7));
 }
 
-/** The seven dates of the week containing this one, Sunday first. */
+/** The seven dates of the week containing this one, Monday first. */
 export function weekDays(isoDate: string): string[] {
   const from = weekStart(isoDate);
   return Array.from({ length: 7 }, (_, i) => addDays(from, i));
 }
 
 /**
- * Sunday to Saturday, inclusive — the query range for the dashboard's week
- * view. Named apart from weekRange, which the scheduling calendar owns and
- * anchors on MONDAY; two functions called the same thing that disagree about
- * which day a week starts is a bug waiting for a Sunday.
+ * Monday to Sunday, inclusive — the query range for the dashboard's week view.
+ *
+ * Named apart from weekRange only because that one belongs to the scheduling
+ * calendar and takes its own path; both now start on Monday, so a date lands
+ * in the same column wherever it is drawn.
  */
 export function dashWeekRange(isoDate: string): DateRange {
   const from = weekStart(isoDate);
