@@ -46,6 +46,9 @@ export async function MasterNav({
     // reads no ws parameter, so scoping its link would be misleading.
     { path: "/availability", label: t("Availability"), scoped: false },
     { path: "/reports/monthly", label: t("Reports"), scoped: true },
+    // Contractor payment statements: KC only (the pages 404 and the data is
+    // RLS-locked for anyone else — 0022).
+    ...(session.isSuperMaster ? [{ path: "/statements", label: t("Statements"), scoped: false }] : []),
     ...(session.isSuperMaster ? [{ path: "/settings", label: t("Settings"), scoped: false }] : []),
   ];
 
