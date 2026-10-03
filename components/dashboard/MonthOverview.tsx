@@ -157,7 +157,7 @@ export function MonthOverview({
           {WEEKDAYS.map((w) => (
             <div
               key={w}
-              className="px-2 py-2 text-center text-[10px] font-bold tracking-widest text-white/80"
+              className="px-2 py-2.5 text-center text-sm font-bold tracking-wider text-white"
             >
               {t(w)}
             </div>
@@ -280,7 +280,7 @@ export function MonthOverview({
         <div className="overflow-hidden rounded-xl border border-line bg-white">
           <div className="grid grid-cols-7 border-b border-line bg-brand">
             {WEEKDAYS.map((w) => (
-              <div key={w} className="py-1.5 text-center text-[10px] font-bold tracking-wider text-white/80">
+              <div key={w} className="py-1.5 text-center text-xs font-bold tracking-wider text-white">
                 {lang === "zh" ? t(w).slice(-1) : w.slice(0, 1)}
               </div>
             ))}
