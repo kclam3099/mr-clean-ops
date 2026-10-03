@@ -62,8 +62,9 @@ export default async function NewStatementPage({
             : [{ date: "", description: `Outsourced cleaning services — ${monthName}`, amount: "" }],
           deductions: [],
           paymentMethod: "Bank Transfer",
+          // Not shown on the statement (owner, 2026-10-03).
           paymentReference: "",
-          paymentDate: today,
+          paymentDate: "",
         }}
       />
     </div>

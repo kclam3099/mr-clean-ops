@@ -169,17 +169,10 @@ export function StatementEditor({
         </dl>
       </section>
 
-      <section className="grid gap-3 rounded-xl border border-line bg-card p-4 sm:grid-cols-3">
+      <section className="rounded-xl border border-line bg-card p-4">
         <F label={t("Payment method")}>
           <input list="statement-methods" value={d.paymentMethod} onChange={(e) => set({ paymentMethod: e.target.value })} maxLength={60} className={inputClass} />
           <datalist id="statement-methods">{METHODS.map((m) => <option key={m} value={m} />)}</datalist>
-        </F>
-        <F label={t("Transaction reference")} error={err("paymentReference")}>
-          <input value={d.paymentReference} onChange={(e) => set({ paymentReference: e.target.value })} maxLength={200}
-            placeholder={t("e.g. bank reference no.")} className={inputClass} />
-        </F>
-        <F label={t("Payment date")}>
-          <input type="date" value={d.paymentDate} onChange={(e) => set({ paymentDate: e.target.value })} className={inputClass} />
         </F>
       </section>
 

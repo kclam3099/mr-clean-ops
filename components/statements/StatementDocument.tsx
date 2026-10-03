@@ -115,19 +115,16 @@ export function StatementDocument({ statement: s }: { statement: StatementDoc })
         <p className="py-3 text-center text-base font-bold tabular-nums">{money(s.netAmount)}</p>
       </div>
 
-      {/* Payment reference — the PAYMENT METHOD / BANK ACCOUNT band */}
-      <div className="mt-5 grid grid-cols-[2fr_1fr] gap-4 bg-[#F7F9FC] px-4 py-4 text-xs">
+      {/* Payment — the PAYMENT METHOD / BANK ACCOUNT band. Owner's call
+          (2026-10-03): no payment reference or payment date on the document. */}
+      <div className="mt-5 grid grid-cols-[1fr_2fr] gap-4 bg-[#F7F9FC] px-4 py-4 text-xs">
         <div>
           <p className="font-bold text-[#0D3D66]">PAYMENT METHOD</p>
           <p className="mt-1 text-[#3D4856]">{s.paymentMethod ?? "—"}</p>
-          <p className="mt-2 font-bold text-[#0D3D66]">PAID FROM</p>
-          <p className="mt-1 text-[#3D4856]">PUBLIC BANK 3215930024 · KCRP SOLUTION</p>
         </div>
         <div>
-          <p className="font-bold text-[#0D3D66]">PAYMENT REFERENCE</p>
-          <p className="mt-1 break-words text-[#3D4856]">{s.paymentReference ?? "—"}</p>
-          <p className="mt-2 font-bold text-[#0D3D66]">PAYMENT DATE</p>
-          <p className="mt-1 text-[#3D4856]">{dmy(s.paymentDate) || "—"}</p>
+          <p className="font-bold text-[#0D3D66]">PAID FROM</p>
+          <p className="mt-1 text-[#3D4856]">PUBLIC BANK 3215930024 · KCRP SOLUTION</p>
         </div>
       </div>
 
