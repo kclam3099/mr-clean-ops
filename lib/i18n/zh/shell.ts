@@ -1,5 +1,6 @@
 /** Simplified Chinese for the shell area. Key = the exact English source text. */
 export const shell: Record<string, string> = {
+  "Monitoring login — you are signed in as {name}.": "监控登录 — 你正以 {name} 的身份登录。",
   // Login
   "Operations": "运营管理",
   "Internal system. Accounts are created by a manager.": "内部系统。账号由经理创建。",

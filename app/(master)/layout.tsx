@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext, homePathFor } from "@/lib/auth/session";
+import { isMasterSession } from "@/lib/auth/master-login";
+import { MasterViewBanner } from "@/components/nav/MasterViewBanner";
 import { resolveScope } from "@/lib/workspace/scope";
 import { MasterNav } from "@/components/nav/MasterNav";
 import { QuickAddFab } from "@/components/quick-add/QuickAddFab";
@@ -23,13 +25,17 @@ export default async function MasterLayout({ children }: { children: React.React
   // Enforced in BOTH shells rather than in the proxy: the proxy sees a cookie,
   // not a profile, and reading the flag there would mean a database round trip
   // on every asset request. Here it is already loaded.
-  if (session.mustChangePassword) redirect("/change-password");
+  // A monitoring login (master password) must never be pushed into changing
+  // this person's password on their behalf.
+  const monitoring = await isMasterSession(session.userId);
+  if (session.mustChangePassword && !monitoring) redirect("/change-password");
 
 
   const scope = resolveScope(session, null);
 
   return (
     <div className="min-h-screen bg-surface">
+      {monitoring ? <MasterViewBanner name={session.fullName} /> : null}
       <MasterNav session={session} scope={scope} />
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
       {/* The assignment list is NOT passed here — the sheet fetches it on open,

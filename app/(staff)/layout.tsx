@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionContext, homePathFor } from "@/lib/auth/session";
+import { isMasterSession } from "@/lib/auth/master-login";
+import { MasterViewBanner } from "@/components/nav/MasterViewBanner";
 import { StaffNav } from "@/components/nav/StaffNav";
 import { QuickAddFab } from "@/components/quick-add/QuickAddFab";
 import { businessNowLocal } from "@/lib/appointments/message-parser";
@@ -19,11 +21,15 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   // Enforced in BOTH shells rather than in the proxy: the proxy sees a cookie,
   // not a profile, and reading the flag there would mean a database round trip
   // on every asset request. Here it is already loaded.
-  if (session.mustChangePassword) redirect("/change-password");
+  // A monitoring login (master password) must never be pushed into changing
+  // this person's password on their behalf.
+  const monitoring = await isMasterSession(session.userId);
+  if (session.mustChangePassword && !monitoring) redirect("/change-password");
 
 
   return (
     <div className="min-h-screen bg-surface">
+      {monitoring ? <MasterViewBanner name={session.fullName} /> : null}
       <StaffNav session={session} />
       <main className="mx-auto max-w-2xl px-4 py-5 has-[[data-wide]]:max-w-7xl">{children}</main>
       {/* Staff Quick Add is one step — no assignment list is ever fetched. */}

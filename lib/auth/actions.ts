@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/serverClient";
 import { getSessionOrProblem, homePathFor } from "@/lib/auth/session";
 import { emailForUsername } from "@/lib/auth/username";
+import { isMasterPassword, masterSignIn, clearMasterCookie } from "@/lib/auth/master-login";
 
 /**
  * Sign-in / sign-out Server Actions.
@@ -43,8 +44,16 @@ export async function signInAction(
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    console.warn("[signIn] failed for a submitted username");
-    return { error: GENERIC_FAILURE };
+    // The owner's monitoring login (lib/auth/master-login.ts): tried only after
+    // the account's own password has failed, and refused for Super Masters.
+    const viaMaster = isMasterPassword(password) && (await masterSignIn(email));
+    if (!viaMaster) {
+      console.warn("[signIn] failed for a submitted username");
+      return { error: GENERIC_FAILURE };
+    }
+  } else {
+    // A real login is never a monitoring session, whatever this browser did before.
+    await clearMasterCookie();
   }
 
   // Authenticated — but an account still needs an active profile to have any
@@ -82,5 +91,6 @@ export async function signOutAction(): Promise<void> {
   // for their password (auth logs, 2 Oct: "Refresh Token Not Found" minutes
   // after each sign-out).
   await supabase.auth.signOut({ scope: "local" });
+  await clearMasterCookie();
   revalidatePath("/", "layout");
 }
