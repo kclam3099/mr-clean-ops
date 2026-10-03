@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveInvoiceAction, type SaveInvoiceResult } from "@/lib/invoices/actions";
+import { saveInvoiceAction, deleteInvoiceAction, type SaveInvoiceResult } from "@/lib/invoices/actions";
+import type { AppError } from "@/lib/errors/appError";
 import { ErrorNotice } from "@/components/ui/ErrorNotice";
 import { useT } from "@/components/i18n/I18nProvider";
-import { formatMoney } from "@/lib/pricing/duration";
+import { invoiceMoney, wholeRinggit } from "@/lib/invoices/money";
 
 /**
  * Request / edit the invoice of one completed job.
@@ -33,10 +34,15 @@ export function InvoiceEditor({
   appointmentId,
   initial,
   saved: initialSaved,
+  canDelete = false,
+  afterDeleteHref,
 }: {
   appointmentId: string;
   initial: InvoiceDraft;
   saved: Saved;
+  /** A Master of the job's workspace (0019); the database checks again. */
+  canDelete?: boolean;
+  afterDeleteHref: string;
 }) {
   const { t } = useT();
   const router = useRouter();
@@ -44,15 +50,18 @@ export function InvoiceEditor({
   const [saved, setSaved] = useState<Saved>(initialSaved);
   const [result, setResult] = useState<SaveInvoiceResult | null>(null);
   const [pending, startTransition] = useTransition();
+  const [deleteError, setDeleteError] = useState<AppError | null>(null);
 
-  const num = (s: string) => (Number.isFinite(Number(s)) && s.trim() !== "" ? Number(s) : 0);
-  const subtotal = draft.items.reduce((s, i) => s + num(i.amount), 0);
+  // Whole ringgit throughout: items, the discount and the total are rounded to
+  // the nearest RM, so the invoice never carries sen ("RM111", not "RM111.20").
+  const num = (s: string) => Number(String(s).replace(/,/g, "").trim()) || 0;
+  const subtotal = draft.items.reduce((s, i) => s + wholeRinggit(i.amount), 0);
   const discountAmount =
-    draft.discountMode === "percent" ? Math.round(subtotal * num(draft.discountValue)) / 100
-    : draft.discountMode === "amount" ? num(draft.discountValue) : 0;
+    draft.discountMode === "percent" ? Math.round((subtotal * num(draft.discountValue)) / 100)
+    : draft.discountMode === "amount" ? wholeRinggit(draft.discountValue) : 0;
   const discountLabel =
     draft.discountMode === "percent" && num(draft.discountValue) > 0 ? `Discount ${num(draft.discountValue)}%`
-    : draft.discountMode === "amount" && num(draft.discountValue) > 0 ? `Discount ${formatMoney(num(draft.discountValue))}`
+    : draft.discountMode === "amount" && num(draft.discountValue) > 0 ? `Discount ${invoiceMoney(wholeRinggit(draft.discountValue))}`
     : "";
   const total = Math.max(0, subtotal - discountAmount);
 
@@ -73,7 +82,7 @@ export function InvoiceEditor({
         billToName: draft.billToName,
         billToAddress: draft.billToAddress,
         serviceTitle: draft.serviceTitle,
-        items: draft.items.map((i) => ({ description: i.description, amount: i.amount })),
+        items: draft.items.map((i) => ({ description: i.description, amount: wholeRinggit(i.amount) })),
         discountLabel,
         discountAmount,
       });
@@ -135,7 +144,7 @@ export function InvoiceEditor({
               {field(`items.${i}.description`) ? <p className="mt-1 text-sm text-red-600">{field(`items.${i}.description`)}</p> : null}
             </div>
             <div className="w-28 shrink-0">
-              <input inputMode="decimal" value={it.amount} placeholder="0.00"
+              <input inputMode="numeric" value={it.amount} placeholder="0"
                 onChange={(e) => setItem(i, { amount: e.target.value })} className={`${inputClass} text-right`} aria-label={t("Amount (RM)")} />
               {field(`items.${i}.amount`) ? <p className="mt-1 text-sm text-red-600">{field(`items.${i}.amount`)}</p> : null}
             </div>
@@ -171,11 +180,11 @@ export function InvoiceEditor({
         </div>
 
         <dl className="space-y-1 border-t border-line pt-3 text-sm">
-          <div className="flex justify-between"><dt className="text-ink-muted">{t("Subtotal")}</dt><dd className="tabular-nums">{formatMoney(subtotal)}</dd></div>
+          <div className="flex justify-between"><dt className="text-ink-muted">{t("Subtotal")}</dt><dd className="tabular-nums">{invoiceMoney(subtotal)}</dd></div>
           {discountAmount > 0 ? (
-            <div className="flex justify-between text-warn"><dt>{discountLabel}</dt><dd className="tabular-nums">−{formatMoney(discountAmount)}</dd></div>
+            <div className="flex justify-between text-warn"><dt>{discountLabel}</dt><dd className="tabular-nums">−{invoiceMoney(discountAmount)}</dd></div>
           ) : null}
-          <div className="flex justify-between text-base font-bold"><dt>{t("Total")}</dt><dd data-invoice-total className="tabular-nums text-brand">{formatMoney(total)}</dd></div>
+          <div className="flex justify-between text-base font-bold"><dt>{t("Total")}</dt><dd data-invoice-total className="tabular-nums text-brand">{invoiceMoney(total)}</dd></div>
         </dl>
       </section>
 
@@ -183,6 +192,26 @@ export function InvoiceEditor({
         className="w-full cursor-pointer rounded-xl bg-brand px-4 py-3 text-base font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50">
         {pending ? t("Saving…") : saved ? t("Save changes") : t("Create invoice")}
       </button>
+
+      {deleteError ? <ErrorNotice error={deleteError} /> : null}
+      {saved && canDelete ? (
+        <button type="button" disabled={pending} data-invoice-delete
+          onClick={() => {
+            if (!window.confirm(t("Delete invoice {no}? The number will not be used again.", { no: saved.no }))) return;
+            startTransition(async () => {
+              const res = await deleteInvoiceAction({ invoiceId: saved.id, appointmentId });
+              if (res.status === "success") {
+                router.push(afterDeleteHref);
+                router.refresh();
+              } else {
+                setDeleteError(res.error);
+              }
+            });
+          }}
+          className="w-full cursor-pointer rounded-xl border border-red-300 bg-card px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+          {t("Delete invoice")}
+        </button>
+      ) : null}
     </div>
   );
 }

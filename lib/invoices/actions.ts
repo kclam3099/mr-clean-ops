@@ -29,6 +29,29 @@ const schema = z.object({
   discountAmount: z.coerce.number().min(0, "Amount cannot be negative"),
 });
 
+const deleteSchema = z.object({ invoiceId: z.string().uuid(), appointmentId: z.string().uuid() });
+
+/**
+ * Deletes an issued invoice — a Master of the job's workspace only (0019).
+ * The number is not reused; the series keeps the gap.
+ */
+export async function deleteInvoiceAction(input: unknown): Promise<{ status: "success" } | { status: "error"; error: AppError }> {
+  const parsed = deleteSchema.safeParse(input);
+  if (!parsed.success) return { status: "error", error: appError(AppErrorCode.VALIDATION_ERROR) };
+  const session = await getSessionContext();
+  if (!session?.isMaster) return { status: "error", error: appError(AppErrorCode.NOT_AUTHORIZED) };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_invoice", { p_invoice_id: parsed.data.invoiceId });
+  if (error) return { status: "error", error: logAndMap("deleteInvoice", error) };
+
+  const id = parsed.data.appointmentId;
+  for (const path of ["/appointments", `/appointments/${id}`, `/my/appointments/${id}`, `/appointments/${id}/invoice`]) {
+    revalidatePath(path);
+  }
+  return { status: "success" };
+}
+
 export type SaveInvoiceResult =
   | { status: "success"; invoiceId: string; invoiceNo: string }
   | { status: "error"; error: AppError; fields?: Record<string, string> };

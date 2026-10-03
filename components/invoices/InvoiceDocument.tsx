@@ -1,13 +1,14 @@
 import Image from "next/image";
 import type { InvoiceDoc } from "@/lib/invoices/xlsx";
 import { invoiceDateText } from "@/lib/invoices/xlsx";
+import { invoiceMoney } from "@/lib/invoices/money";
 
 /**
  * The invoice drawn as HTML in the owner's Excel design, for printing / saving
  * as PDF. Pure presentation: the caller has already read the invoice through RLS.
  */
 export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
-  const money = (n: number) => `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = invoiceMoney;
   const rows = [...invoice.items, ...Array.from({ length: Math.max(0, 4 - invoice.items.length) }, () => null)];
   const discount = invoice.discountLabel ?? (invoice.discountAmount > 0 ? `Discount ${money(invoice.discountAmount)}` : "");
 

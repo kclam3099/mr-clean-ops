@@ -18,6 +18,9 @@ export const invoices: Record<string, string> = {
   "None": "无",
   "Subtotal": "小计",
   "Create invoice": "生成发票",
+  "Delete invoice": "删除发票",
+  "Delete invoice {no}? The number will not be used again.": "删除发票 {no}？这个号码不会再被使用。",
+  "Only a Master can change an issued invoice.": "发票开出后，只有主管可以修改或删除。",
   "Mark the job completed before requesting an invoice.": "请先把这单标记完成，才能申请发票。",
   // Validation from lib/invoices/actions.ts.
   "Describe the item": "请填写项目",

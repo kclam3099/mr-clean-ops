@@ -57,6 +57,12 @@ strings = strings.replace(/<si>[\s\S]*?<\/si>/g, (si) => {
   return referenced.has(index) ? "<si><t></t></si>" : si;
 });
 
+// Whole ringgit: the owner invoices in round amounts ("RM139", not "RM139.00").
+const stylesPath = "xl/styles.xml";
+const styles = (await zip.file(stylesPath).async("string"))
+  .replaceAll("&quot;RM&quot;#,##0.00", "&quot;RM&quot;#,##0");
+zip.file(stylesPath, styles);
+
 zip.file(sheetPath, sheet);
 zip.file(stringsPath, strings);
 const out = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });

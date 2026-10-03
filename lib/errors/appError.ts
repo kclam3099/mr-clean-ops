@@ -32,6 +32,7 @@ export const AppErrorCode = {
   VALIDATION_ERROR: "VALIDATION_ERROR",
   EDIT_WINDOW_CLOSED: "EDIT_WINDOW_CLOSED",
   INVOICE_NEEDS_COMPLETED: "INVOICE_NEEDS_COMPLETED",
+  INVOICE_MASTER_ONLY: "INVOICE_MASTER_ONLY",
   LEAVE_OVERLAP: "LEAVE_OVERLAP",
   LEAVE_ALREADY_DECIDED: "LEAVE_ALREADY_DECIDED",
   UNEXPECTED: "UNEXPECTED",
@@ -80,6 +81,7 @@ const MESSAGES: Record<AppErrorCode, string> = {
   VALIDATION_ERROR: "Please check the details and try again.",
   EDIT_WINDOW_CLOSED: "Appointments more than 3 days old can no longer be edited.",
   INVOICE_NEEDS_COMPLETED: "Mark the job completed before requesting an invoice.",
+  INVOICE_MASTER_ONLY: "Only a Master can change an issued invoice.",
   LEAVE_OVERLAP: "You already have a leave request covering those dates.",
   LEAVE_ALREADY_DECIDED: "This leave request has already been decided.",
   UNEXPECTED: "Something went wrong. Please try again.",
@@ -139,6 +141,7 @@ const RULES: Array<{
 
   // Invoices (0018).
   { code: AppErrorCode.INVOICE_NEEDS_COMPLETED, test: /^Only a completed appointment can be invoiced\b/i },
+  { code: AppErrorCode.INVOICE_MASTER_ONLY, test: /^Only a Master can change an issued invoice\b/i },
 
   // Leave requests (0014).
   { code: AppErrorCode.LEAVE_OVERLAP, test: /^A leave request already covers those dates\b/i },

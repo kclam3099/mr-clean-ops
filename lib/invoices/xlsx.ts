@@ -1,6 +1,7 @@
 import "server-only";
 import JSZip from "jszip";
 import { INVOICE_TEMPLATE_BASE64 } from "./template-data";
+import { invoiceMoney } from "./money";
 
 /**
  * Fills the owner's invoice template and returns the .xlsx bytes.
@@ -117,7 +118,7 @@ export async function buildInvoiceXlsx(doc: InvoiceDoc): Promise<Uint8Array> {
 
   const discountRow = 13 + extra;
   const label = doc.discountLabel
-    ?? (doc.discountAmount > 0 ? `Discount RM${doc.discountAmount.toFixed(2)}` : null);
+    ?? (doc.discountAmount > 0 ? `Discount ${invoiceMoney(doc.discountAmount)}` : null);
   sheet = setCell(sheet, `C${discountRow}`, label);
   sheet = setCell(sheet, `C${14 + extra}`, doc.total);
 

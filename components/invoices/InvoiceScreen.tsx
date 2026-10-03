@@ -5,6 +5,7 @@ import { getInvoiceForAppointment, type Invoice } from "@/lib/invoices/queries";
 import { businessToday } from "@/lib/agenda/queries";
 import { getI18n } from "@/lib/i18n/server";
 import { InvoiceEditor, type InvoiceDraft } from "./InvoiceEditor";
+import { invoiceMoney } from "@/lib/invoices/money";
 
 /** The service line the owner's invoices carry unless someone changes it. */
 const DEFAULT_SERVICE = "Deep Cleaning + High Temperature Steam";
@@ -59,6 +60,9 @@ export async function InvoiceScreen({
         <p className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
           {t("Mark the job completed before requesting an invoice.")}
         </p>
+      ) : invoice && !session.isMaster ? (
+        // Issued: the staff member can open and send it, a Master changes it (0019).
+        <IssuedInvoice invoice={invoice} />
       ) : (
         <InvoiceEditor
           appointmentId={appointmentId}
@@ -70,16 +74,58 @@ export async function InvoiceScreen({
             items: [
               ...detail.items.map((i) => ({
                 description: i.quantity > 1 ? `${i.description} x${i.quantity}` : i.description,
-                amount: i.lineTotal.toFixed(2),
+                amount: String(Math.round(i.lineTotal)),
               })),
-              ...detail.addons.map((a) => ({ description: a.description, amount: a.amount.toFixed(2) })),
+              ...detail.addons.map((a) => ({ description: a.description, amount: String(Math.round(a.amount)) })),
             ].slice(0, 12),
             discountMode: "none",
             discountValue: "",
           }}
           saved={invoice ? { id: invoice.id, no: invoice.invoiceNo } : null}
+          canDelete={session.isMaster}
+          afterDeleteHref={backHref}
         />
       )}
+    </div>
+  );
+}
+
+/** An issued invoice as the staff member sees it: read-only, with the downloads. */
+async function IssuedInvoice({ invoice }: { invoice: Invoice }) {
+  const { t } = await getI18n();
+  return (
+    <div className="space-y-4" data-invoice-readonly>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-ok/40 bg-ok/5 px-4 py-3">
+        <p className="text-sm font-semibold text-ok">{t("Invoice {no}", { no: invoice.invoiceNo })}</p>
+        <div className="flex flex-wrap gap-2">
+          <a href={`/invoices/${invoice.id}/xlsx`}
+            className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
+            {t("Download Excel")}
+          </a>
+          <a href={`/invoices/${invoice.id}/print`} target="_blank" rel="noopener"
+            className="rounded-lg border border-line bg-card px-3 py-2 text-sm font-semibold text-ink transition hover:bg-sunken">
+            {t("PDF / Print")}
+          </a>
+        </div>
+      </div>
+      <section className="space-y-1 rounded-xl border border-line bg-card p-4 text-sm">
+        <p className="font-semibold text-ink">{invoice.billToName}</p>
+        {invoice.billToAddress ? <p className="text-ink-muted">{invoice.billToAddress}</p> : null}
+        <ul className="mt-2 divide-y divide-line">
+          {invoice.items.map((i, n) => (
+            <li key={n} className="flex justify-between gap-3 py-1.5">
+              <span>{i.description}</span><span className="tabular-nums">{invoiceMoney(i.amount)}</span>
+            </li>
+          ))}
+        </ul>
+        {invoice.discountLabel ? (
+          <p className="flex justify-between text-warn"><span>{invoice.discountLabel}</span><span>−{invoiceMoney(invoice.discountAmount)}</span></p>
+        ) : null}
+        <p className="flex justify-between border-t border-line pt-2 text-base font-bold">
+          <span>{t("Total")}</span><span className="tabular-nums text-brand">{invoiceMoney(invoice.total)}</span>
+        </p>
+      </section>
+      <p className="text-xs text-ink-muted">{t("Only a Master can change an issued invoice.")}</p>
     </div>
   );
 }
@@ -97,8 +143,8 @@ function fromInvoice(inv: Invoice): InvoiceDraft {
     billToName: inv.billToName,
     billToAddress: inv.billToAddress ?? "",
     serviceTitle: inv.serviceTitle ?? "",
-    items: inv.items.map((i) => ({ description: i.description, amount: i.amount.toFixed(2) })),
+    items: inv.items.map((i) => ({ description: i.description, amount: String(Math.round(i.amount)) })),
     discountMode: pct ? "percent" : inv.discountAmount > 0 ? "amount" : "none",
-    discountValue: pct ? (pct[1] as string) : inv.discountAmount > 0 ? inv.discountAmount.toFixed(2) : "",
+    discountValue: pct ? (pct[1] as string) : inv.discountAmount > 0 ? String(Math.round(inv.discountAmount)) : "",
   };
 }
