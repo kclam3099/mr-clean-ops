@@ -40,7 +40,7 @@ export async function MasterNav({
   const links = [
     { path: "/dashboard", label: t("Today"), scoped: true },
     { path: "/calendar", label: t("Calendar"), scoped: true },
-    { path: "/appointments", label: t("Appointments"), scoped: true },
+    { path: "/appointments", label: t("Customers"), scoped: true },
     { path: "/staff", label: t("Staff"), scoped: true },
     // /availability resolves its own operational workspace server-side and
     // reads no ws parameter, so scoping its link would be misleading.

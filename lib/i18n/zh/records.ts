@@ -1,0 +1,20 @@
+/** Simplified Chinese for customer records. Key = the exact English source text. */
+export const records: Record<string, string> = {
+  "Customers": "客户",
+  "Customer records": "客户记录",
+  "All months": "全部月份",
+  "Download spreadsheet": "下载 Excel",
+  "Everyone": "全部员工",
+  "Search": "搜索",
+  "Name, phone or address": "姓名、电话或地址",
+  "Filter": "筛选",
+  "Clear": "清除",
+  "1 job": "1 单",
+  "{count} jobs": "{count} 单",
+  "No records match.": "没有符合的记录。",
+  "Amount": "金额",
+  "Add-on": "附加服务",
+  "Name": "姓名",
+  "Phone": "电话",
+  "Address": "地址",
+};
