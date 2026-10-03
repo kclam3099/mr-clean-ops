@@ -66,6 +66,8 @@ export type AppointmentDetail = {
    * of migration 0013. The section is then hidden rather than shown empty.
    */
   addonsAvailable: boolean;
+  /** The MRC number when this job has been invoiced (migration 0018). */
+  invoiceNo: string | null;
   /** True when this caller is the assigned staff member. */
   isOwnAppointment: boolean;
 };
@@ -137,13 +139,14 @@ export async function getAppointmentDetail(
   // Add-ons are read separately rather than embedded, so a database without
   // migration 0013 degrades to "no add-on section" instead of breaking the
   // whole appointment page. Same RLS predicate as the appointment itself.
-  const [{ data: staffRows }, addonRead] = await Promise.all([
+  const [{ data: staffRows }, addonRead, invoiceRead] = await Promise.all([
     supabase.from("staff").select("id"),
     supabase
       .from("appointment_addons")
       .select("id, description, amount, created_by, created_at")
       .eq("appointment_id", row.id)
       .order("created_at"),
+    supabase.from("invoices").select("invoice_no").eq("appointment_id", row.id).maybeSingle(),
   ]);
   const colours = staffColourIndexes((staffRows ?? []).map((r) => r.id as string));
   const isOwn = session.staffId !== null && session.staffId === row.staff_id;
@@ -188,6 +191,7 @@ export async function getAppointmentDetail(
       canRemove: session.isMaster || (isOwn && a.created_by === session.userId),
     })),
     addonsAvailable: !addonRead.error,
+    invoiceNo: (invoiceRead.data as { invoice_no: string } | null)?.invoice_no ?? null,
     isOwnAppointment: isOwn,
   };
 }
@@ -214,6 +218,8 @@ export type AppointmentCapabilities = {
    * the appointment and still mark it completed, nothing else.
    */
   staffLocked: boolean;
+  /** Request / open the invoice: the job is done, and it is theirs to invoice. */
+  canInvoice: boolean;
 };
 
 /**
@@ -241,6 +247,7 @@ export function capabilitiesFor(
 
   return {
     staffLocked,
+    canInvoice: detail.status === "completed" && (isMaster || detail.isOwnAppointment),
     canEditCustomer: editable,
     canEditItems: editable,
     canReschedule: editable,

@@ -41,6 +41,7 @@ export default async function StaffAppointmentDetailPage({
       // Only when this person genuinely belongs to more than one workspace.
       showWorkspace={session.workspaces.length > 1}
       backHref="/my/calendar"
+      invoiceHref={`/my/appointments/${id}/invoice`}
     />
   );
 }

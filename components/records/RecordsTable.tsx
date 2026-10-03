@@ -15,6 +15,7 @@ export async function RecordsTable({ rows, showWorkspace }: { rows: RecordRow[];
         <thead className="bg-brand text-[11px] font-bold uppercase tracking-wider text-white/85">
           <tr>
             <th className="px-3 py-2">{t("Date")}</th>
+            <th className="px-3 py-2">{t("Invoice")}</th>
             <th className="px-3 py-2 text-right">{t("Amount")}</th>
             <th className="px-3 py-2 text-right">{t("Add-on")}</th>
             <th className="px-3 py-2">{t("Name")}</th>
@@ -31,6 +32,12 @@ export async function RecordsTable({ rows, showWorkspace }: { rows: RecordRow[];
                   {shortDate(r.date, locale)}
                 </Link>
                 {r.status === "completed" ? <span className="ml-1 text-[10px] text-ok">✓</span> : null}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                {r.invoiceId ? (
+                  <a href={`/invoices/${r.invoiceId}/print`} target="_blank" rel="noopener"
+                    className="font-medium text-ink hover:text-brand hover:underline">{r.invoiceNo}</a>
+                ) : null}
               </td>
               <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">{compactMoney(r.amount)}</td>
               <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-ink-muted">
@@ -69,6 +76,7 @@ export async function RecordsTable({ rows, showWorkspace }: { rows: RecordRow[];
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-muted">
               <span className="tabular-nums">{shortDate(r.date, locale)}</span>
+              {r.invoiceNo ? <><span aria-hidden>·</span><span className="font-medium tabular-nums text-ink">{r.invoiceNo}</span></> : null}
               {r.staffName ? <><span aria-hidden>·</span><span className={colourAt(r.staffColourIndex).text}>{r.staffName}</span></> : null}
               {r.phone ? <><span aria-hidden>·</span><span className="tabular-nums">{r.phone}</span></> : null}
             </span>

@@ -31,6 +31,7 @@ export const AppErrorCode = {
   INVALID_APPOINTMENT_STATE: "INVALID_APPOINTMENT_STATE",
   VALIDATION_ERROR: "VALIDATION_ERROR",
   EDIT_WINDOW_CLOSED: "EDIT_WINDOW_CLOSED",
+  INVOICE_NEEDS_COMPLETED: "INVOICE_NEEDS_COMPLETED",
   LEAVE_OVERLAP: "LEAVE_OVERLAP",
   LEAVE_ALREADY_DECIDED: "LEAVE_ALREADY_DECIDED",
   UNEXPECTED: "UNEXPECTED",
@@ -78,6 +79,7 @@ const MESSAGES: Record<AppErrorCode, string> = {
     "This appointment can no longer be changed because it is completed or cancelled.",
   VALIDATION_ERROR: "Please check the details and try again.",
   EDIT_WINDOW_CLOSED: "Appointments more than 3 days old can no longer be edited.",
+  INVOICE_NEEDS_COMPLETED: "Mark the job completed before requesting an invoice.",
   LEAVE_OVERLAP: "You already have a leave request covering those dates.",
   LEAVE_ALREADY_DECIDED: "This leave request has already been decided.",
   UNEXPECTED: "Something went wrong. Please try again.",
@@ -135,6 +137,9 @@ const RULES: Array<{
   // Staff edit window (0015).
   { code: AppErrorCode.EDIT_WINDOW_CLOSED, test: /^Appointments older than 3 days can no longer be edited\b/i },
 
+  // Invoices (0018).
+  { code: AppErrorCode.INVOICE_NEEDS_COMPLETED, test: /^Only a completed appointment can be invoiced\b/i },
+
   // Leave requests (0014).
   { code: AppErrorCode.LEAVE_OVERLAP, test: /^A leave request already covers those dates\b/i },
   { code: AppErrorCode.LEAVE_ALREADY_DECIDED, test: /^This leave request has already been decided\b/i },
@@ -152,7 +157,7 @@ const RULES: Array<{
   },
   {
     code: AppErrorCode.VALIDATION_ERROR,
-    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b|^Invalid range\b|^Range too large\b|^Invalid amount\b|^start_time must be before end_time\b|^start_time and end_time must both be\b|^Already an active member\b|^No active membership found to end\b|^Not found\b|^Appointment has no assigned staff to credit\b|^Add-on item is required\b|^Leave dates are invalid\b|^Leave times are invalid\b/i,
+    test: /^At least one service item\b|^Item total must be positive\b|^Multiple active workspace memberships\b|^No active workspace membership\b|^workspace_id and staff_id are required\b|^Staff is not active\b|^Staff is not an active member\b|^An existing booked appointment falls outside\b|^A reason is required\b|^Invalid range\b|^Range too large\b|^Invalid amount\b|^start_time must be before end_time\b|^start_time and end_time must both be\b|^Already an active member\b|^No active membership found to end\b|^Not found\b|^Appointment has no assigned staff to credit\b|^Add-on item is required\b|^Leave dates are invalid\b|^Leave times are invalid\b|^Invoice details are invalid\b/i,
   },
 ];
 

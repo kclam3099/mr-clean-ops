@@ -4,6 +4,7 @@ import type { SessionContext } from "@/lib/auth/session";
 import type { WorkspaceScope } from "@/lib/workspace/scope";
 import { getMasterAgenda, monthRange, businessToday, addDays, type DateRange } from "@/lib/agenda/queries";
 import type { AppError } from "@/lib/errors/appError";
+import { getInvoiceNumbers } from "@/lib/invoices/queries";
 
 /**
  * Customer records: every job as one row — the database version of the owner's
@@ -29,6 +30,9 @@ export type RecordRow = {
   staffColourIndex: number;
   workspaceName: string | null;
   status: "booked" | "completed" | "cancelled";
+  /** MRC number and invoice id once invoiced (0018). */
+  invoiceNo: string | null;
+  invoiceId: string | null;
 };
 
 export type RecordsQuery = {
@@ -91,6 +95,8 @@ export async function getCustomerRecords(
     }
   }
 
+  const invoices = await getInvoiceNumbers(appts.map((a) => a.id));
+
   return {
     ok: true,
     range,
@@ -108,6 +114,8 @@ export async function getCustomerRecords(
       staffColourIndex: a.staffColourIndex,
       workspaceName: a.workspaceName,
       status: a.status,
+      invoiceNo: invoices.get(a.id)?.no ?? null,
+      invoiceId: invoices.get(a.id)?.id ?? null,
     })),
   };
 }

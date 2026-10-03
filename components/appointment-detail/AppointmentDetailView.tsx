@@ -27,13 +27,15 @@ type Panel = "none" | "customer" | "items" | "reschedule";
 type OverrideTarget = "customer" | "items" | "reschedule";
 
 export function AppointmentDetailView({
-  detail, capabilities, config, showWorkspace, backHref,
+  detail, capabilities, config, showWorkspace, backHref, invoiceHref,
 }: {
   detail: AppointmentDetail;
   capabilities: AppointmentCapabilities;
   config: BookingConfig;
   showWorkspace: boolean;
   backHref: string;
+  /** Where "Request invoice" goes — differs between the Master and staff shells. */
+  invoiceHref?: string;
 }) {
   const router = useRouter();
   const { t, lang } = useT();
@@ -104,6 +106,15 @@ export function AppointmentDetailView({
       <Summary detail={detail} showWorkspace={showWorkspace} />
       <Items detail={detail} />
       <AddonsSection detail={detail} canAdd={capabilities.canAddAddon} />
+
+      {capabilities.canInvoice && invoiceHref ? (
+        <a href={invoiceHref} data-request-invoice
+          className="flex min-h-12 items-center justify-between gap-3 rounded-xl border-2 border-brand bg-brand/5 px-4 py-3
+                     text-sm font-semibold text-brand transition hover:bg-brand/10">
+          <span>{detail.invoiceNo ? t("Invoice {no}", { no: detail.invoiceNo }) : t("Request invoice")}</span>
+          <span aria-hidden="true">→</span>
+        </a>
+      ) : null}
 
       {/* ---------------- actions ---------------- */}
       {!terminal ? (

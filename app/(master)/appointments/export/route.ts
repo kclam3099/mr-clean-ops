@@ -26,6 +26,7 @@ export async function GET(request: Request) {
   const ws = wb.addWorksheet("Records");
   ws.columns = [
     { header: "MONTH", key: "month", width: 8 },
+    { header: "INVOICE", key: "invoice", width: 11 },
     { header: "DATE", key: "date", width: 12 },
     { header: "AMOUNT", key: "amount", width: 12 },
     { header: "ADD-ON", key: "addon", width: 10 },
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
     ws.addRow({
       month: new Date(Date.UTC(Number(y), Number(m) - 1, 1))
         .toLocaleString("en-GB", { month: "short", timeZone: "UTC" }).toUpperCase(),
+      invoice: r.invoiceNo ?? "",
       date: `${d}/${m}/${y}`,
       amount: r.amount,
       addon: r.addons || null,

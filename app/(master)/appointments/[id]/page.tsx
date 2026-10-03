@@ -40,6 +40,7 @@ export default async function MasterAppointmentDetailPage({
       // Only meaningful to a Master who administers more than one workspace.
       showWorkspace={session.workspaces.length > 1}
       backHref="/calendar"
+      invoiceHref={`/appointments/${id}/invoice`}
     />
   );
 }
