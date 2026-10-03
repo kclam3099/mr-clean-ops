@@ -41,7 +41,7 @@ export async function proxy(request: NextRequest) {
 
   if (!user && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return withSessionCookies(NextResponse.redirect(loginUrl), response);
   }
 
   if (user && pathname === "/login") {
@@ -50,10 +50,23 @@ export async function proxy(request: NextRequest) {
     // and middleware runs on every request — app/page.tsx makes that decision
     // once, where it is actually needed. The login page itself also re-checks,
     // because a session can exist without a usable profile.
-    return NextResponse.redirect(new URL("/", request.url));
+    return withSessionCookies(NextResponse.redirect(new URL("/", request.url)), response);
   }
 
   return response;
+}
+
+/**
+ * Carries any session cookies getUser() just wrote onto a redirect.
+ *
+ * A refresh ROTATES the refresh token: the old one stops working. A redirect
+ * built fresh would drop the new cookies, leaving the browser holding the
+ * retired token — and the next refresh failing with "Refresh Token Not Found",
+ * which looks to the user like being logged out for no reason.
+ */
+function withSessionCookies(redirect: NextResponse, from: NextResponse): NextResponse {
+  for (const cookie of from.cookies.getAll()) redirect.cookies.set(cookie);
+  return redirect;
 }
 
 export const config = {

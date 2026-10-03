@@ -52,7 +52,7 @@ export async function signInAction(
   // rather than dropping the user into a shell they cannot use.
   const result = await getSessionOrProblem();
   if (!result.ok) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     console.warn(`[signIn] rejected session: ${result.problem}`);
     return { error: result.problem === "inactive_profile" ? INACTIVE : GENERIC_FAILURE };
   }
@@ -76,6 +76,11 @@ export async function signInAction(
  */
 export async function signOutAction(): Promise<void> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // LOCAL scope: end this device's session only. The default ("global")
+  // revokes every session the account has — signing out on the tablet logged
+  // the same person out on their phone, which is why people kept being asked
+  // for their password (auth logs, 2 Oct: "Refresh Token Not Found" minutes
+  // after each sign-out).
+  await supabase.auth.signOut({ scope: "local" });
   revalidatePath("/", "layout");
 }
