@@ -24,7 +24,11 @@ export default async function InvoicePrintPage({ params }: { params: Promise<{ i
 
 
   return (
-    <div className="min-h-screen bg-white text-[#2B3440] print:bg-white">
+    <div className="min-h-screen bg-white text-[#2B3440] print:min-h-0 print:bg-white">
+      {/* A4, and no page margin: with none, the browser has nowhere to print
+          its own date / title / URL header and footer. The document pads
+          itself instead. */}
+      <style>{"@page { size: A4; margin: 0; } @media print { html, body { background: #fff !important; } }"}</style>
       <div className="mx-auto flex max-w-[52rem] justify-end gap-2 px-4 pt-4 print:hidden">
         <PrintButton />
       </div>

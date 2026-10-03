@@ -86,7 +86,11 @@ export function AppointmentDetailView({
 
       {result?.status === "error" && !override ? <ErrorNotice error={result.error} /> : null}
 
-      {terminal ? (
+      {terminal && detail.status === "completed" && capabilities.canEditCustomer ? (
+        <p data-correction-mode className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
+          {t("This appointment is completed. As Super Master you can still correct the customer details and services; its time slot stays as it was.")}
+        </p>
+      ) : terminal ? (
         <p className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
           {t(
             capabilities.canAddAddon
@@ -117,7 +121,7 @@ export function AppointmentDetailView({
       ) : null}
 
       {/* ---------------- actions ---------------- */}
-      {!terminal ? (
+      {!terminal || capabilities.canEditCustomer || capabilities.canEditItems ? (
         <div className="flex flex-wrap gap-2">
           {capabilities.canEditCustomer ? (
             <Action label={t("Edit customer")} active={panel === "customer"}

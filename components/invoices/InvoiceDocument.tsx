@@ -13,7 +13,14 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const discount = invoice.discountLabel ?? (invoice.discountAmount > 0 ? `Discount ${money(invoice.discountAmount)}` : "");
 
   return (
-  <article className="mx-auto max-w-[52rem] px-6 py-8 text-[13px] leading-snug sm:px-12" data-invoice-doc>
+  <article
+    className="mx-auto max-w-[52rem] px-6 py-8 text-[13px] leading-snug sm:px-12 print:max-w-none print:px-[14mm] print:py-[12mm]"
+    // Browsers drop background colours when printing unless told not to —
+    // which turned the navy INVOICE box, table header and TOTAL bar into
+    // white-on-white in the saved PDF.
+    style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+    data-invoice-doc
+  >
     {/* Header: logo | gold bar | company */}
     <header className="flex items-center gap-6">
       <Image src="/brand/invoice-logo.png" alt="Mr Clean & Clean" width={150} height={150} className="h-32 w-32 object-contain" priority />

@@ -244,12 +244,15 @@ export function capabilitiesFor(
   // then refusing them would be pointless.
   const mutable = detail.status === "booked";
   const editable = mutable && !staffLocked;
+  // KC (Super Master) may still correct a completed job's details and
+  // services (0021); the database keeps its time slot as it was.
+  const correction = detail.status === "completed" && session.isSuperMaster;
 
   return {
     staffLocked,
     canInvoice: detail.status === "completed" && (isMaster || detail.isOwnAppointment),
-    canEditCustomer: editable,
-    canEditItems: editable,
+    canEditCustomer: editable || correction,
+    canEditItems: editable || correction,
     canReschedule: editable,
     canCancel: editable,
     // Staff completion is gated by a company setting that only the server can

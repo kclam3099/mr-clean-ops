@@ -1,5 +1,7 @@
 /** Simplified Chinese for the appointment area. Key = the exact English source text. */
 export const appointment: Record<string, string> = {
+  "This appointment is completed. As Super Master you can still correct the customer details and services; its time slot stays as it was.":
+    "这个预约已完成。你是超级主管，仍然可以修改客户资料和服务项目；预约时间不会改变。",
   "Appointments more than 3 days old can no longer be edited.": "超过 3 天的预约不能再修改。",
   "This appointment is more than 3 days old. You can view it and mark it completed, but it can no longer be edited.":
     "这个预约已超过 3 天。你可以查看并标记完成，但不能再修改。",
